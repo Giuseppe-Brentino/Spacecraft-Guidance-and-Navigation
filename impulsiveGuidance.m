@@ -3,7 +3,7 @@
 % Author: Giuseppe Brentino
 
 clearvars; close all; clc;
-
+rng default;
 addpath('.\kernels')
 addpath('.\mice\src\mice')
 addpath('.\mice\lib')
@@ -110,7 +110,8 @@ mu = cspice_bodvrd('SUN', 'GM',1);
 % select integration frame string (SPICE naming convention)
 frame = 'ECLIPJ2000';
 center = 'SSB';
-% x = state1, state2, state3, t0,tdsm,timp;
+
+% initial conditions
 LWO = cspice_str2et( char(datetime(2024,10,1)) );
 LWC = cspice_str2et( char(datetime(2025,2,1)) );
 
@@ -136,18 +137,6 @@ x1_ub = max([max_earth_states max_apo_states],[],2) + [1e3*ones(3,1);10*ones(3,1
 lb = [x1_lb; x1_lb; x1_lb; LWO; DSMO; IMPO];
 ub = [x1_ub; x1_ub; x1_ub; LWC; DSMC; IMPC];
 
-%Initial conditions
-x0 = zeros(21,1);
-x0(19) = (LWO+LWC)/2;
-x0(20) = (DSMO+DSMC)/2;
-x0(21) = (IMPO+IMPC)/2;
-x0(1:6) = cspice_spkezr('Earth', x0(19), frame, 'NONE', center);
-ode_opt = odeset('RelTol',1e-11,'AbsTol',1e-12);
-[~,x2_guess] = ode78(@scPropagator,[x0(19) x0(20)],x0(1:6),ode_opt,mu);
-x0(7:12) = x2_guess(end,:)';
-[~,x3_guess] = ode78(@scPropagator,[x0(20) x0(21)],x0(7:12),ode_opt,mu);
-x0(13:18) = x3_guess(end,:)'; 
-
 opt = optimoptions('fmincon','Display','iter-detailed','UseParallel',true);
 parfor i = 1:4
     cspice_furnsh('kernels\naif0012.tls'); % (LSK)
@@ -156,8 +145,33 @@ parfor i = 1:4
     cspice_furnsh('kernels\gm_de432.tpc');
     cspice_furnsh('kernels\pck00010.tpc');
 end
-[states,fval] = fmincon(@(x)guidance(x,mu,frame,center,bodies),x0,[],[],[],[],lb,ub,@(x)nonlcon(x,mu),opt);
 
+ode_opt = odeset('RelTol',1e-11,'AbsTol',1e-12);
+
+x0 = zeros(21,1);
+x0(19) = (LWO+LWC)/2 - (LWC-LWO)*0.4;
+x0(20) = (DSMO+DSMC)/2 - (LWC-LWO)*0.4;
+x0(21) = (IMPO+IMPC)/2 - (LWC-LWO)*0.4;
+x0(1:6) = cspice_spkezr('Earth', x0(19), frame, 'NONE', center);
+
+[~,x2_guess] = ode78(@scPropagator,[x0(19) x0(20)],x0(1:6),ode_opt,mu);
+x0(7:12) = x2_guess(end,:)';
+[~,x3_guess] = ode78(@scPropagator,[x0(20) x0(21)],x0(7:12),ode_opt,mu);
+x0(13:18) = x3_guess(end,:)';
+
+% optimization
+[states,fval,exitflag] = fmincon(@(x)guidance(x,frame,center,bodies),x0,[],[],[],[],lb,ub,@(x)nonlcon(x,mu),opt);
+
+% retrive data
+x_e =  cspice_spkezr('Earth',states(19),frame,'NONE',center);
+dv0 = states(4:6) - x_e(4:6);
+dv0_norm = norm(dv0);
+[~,x_sc_prop] = ode78(@scPropagator,[states(19) states(20)],states(1:6),ode_opt,mu);
+dv_dsm = states(10:12)-x_sc_prop(end,4:6)';
+dv_dsm_norm = norm(dv_dsm);
+t0 = cspice_et2utc(states(19),'C',1);
+tdsm = cspice_et2utc(states(20),'C',1);
+timp = cspice_et2utc(states(21),'C',1);
 %% functions Ex 1
 
 function [distance] = apophisEarthFindMin(t)    
@@ -223,16 +237,13 @@ end
 
 end
 
-function J = guidance(x,mu,frame,center,bodies)
+function J = guidance(x,frame,center,bodies)
 
-t_dsm = x(20);
 t_imp = x(21);
 
 x2 = x(7:12);
-ode_opt = odeset('RelTol',1e-11,'AbsTol',1e-12);
-[~,x_sc_2] = ode78(@scPropagator,[t_dsm t_imp],x2,ode_opt,mu);
 
-x_Ai = cspice_spkezr('20099942',t_imp,frame,'NONE',center) + [zeros(3,1); x_sc_2(end,4:6)'*5e-5];
+x_Ai = cspice_spkezr('20099942',t_imp,frame,'NONE',center) + [zeros(3,1); x(16:18)*5e-5];%x_sc_2(end,4:6)'*5e-5];
 opt = odeset('RelTol',1e-8,'AbsTol',1e-9,'Events',@(t,s) minDistanceEvent(t,s));
 [T,s] = ode78(@(t,s) nbody_rhs(t,s,bodies,frame),[t_imp t_imp*10],x_Ai,opt);
 
@@ -241,19 +252,26 @@ J = -norm( s(end,1:3) - cspice_spkpos('EARTH',T(end),frame,'NONE',center)' );
 end
 
 function [C, Ceq] = nonlcon(x,mu)
-    
-    s_e = cspice_spkezr('EARTH',x(19),'ECLIPJ2000','NONE','SSB');
-    Ceq(1:3) = x(1:3) - s_e(1:3) ;
+
+    t0 = x(19);
+    tdsm = x(20);
+    timp = x(21);
+    x1 = x(1:6);
+    x2 = x(7:12);
+    x3 = x(13:18);
+
+    s_e = cspice_spkezr('EARTH',t0,'ECLIPJ2000','NONE','SSB');
+    Ceq(1:3) = x(1:3) - s_e(1:3) ; %psi i
    
     ode_opt = odeset('RelTol',1e-11,'AbsTol',1e-12);
-    [~,x_sc_1] = ode78(@scPropagator,[x(19) x(20)],x(1:6),ode_opt,mu);
-    Ceq(4:6) = x(7:9) -x_sc_1(end,1:3)';
+    [~,x_sc_1] = ode78(@scPropagator,[t0 tdsm],x1,ode_opt,mu);
+    Ceq(4:6) = x_sc_1(end,1:3)' - x2(1:3); % z1
 
     ode_opt = odeset('RelTol',1e-11,'AbsTol',1e-12);
-    [~,x_sc_2] = ode78(@scPropagator,[x(20) x(21)],x(7:12),ode_opt,mu);
-    Ceq(7:12) = x(13:18) - x_sc_2(end,:)';
+    [~,x_sc_2] = ode78(@scPropagator,[tdsm timp],x2,ode_opt,mu);
+    Ceq(7:12) = x_sc_2(end,:)'-x3; % z2
 
-    Ceq(13:15) = x(13:15) - cspice_spkpos('20099942',x(21),'ECLIPJ2000','NONE','SSB');
+    Ceq(13:15) = x3(1:3) - cspice_spkpos('20099942',timp,'ECLIPJ2000','NONE','SSB'); %psi2
 
     C = norm(x(4:6)-s_e(4:6)) + norm(x_sc_1(end,4:6)'-x(10:12)) - 5;
 
