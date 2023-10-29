@@ -149,9 +149,9 @@ end
 ode_opt = odeset('RelTol',1e-11,'AbsTol',1e-12);
 
 x0 = zeros(21,1);
-x0(19) = (LWO+LWC)/2;% - (LWC-LWO)*0.4;
-x0(20) = (DSMO+DSMC)/2;% - (LWC-LWO)*0.4;
-x0(21) = (IMPO+IMPC)/2;% - (LWC-LWO)*0.4;
+x0(19) = (LWO+LWC)/2 - (LWC-LWO)*0.4;
+x0(20) = (DSMO+DSMC)/2 - (LWC-LWO)*0.4;
+x0(21) = (IMPO+IMPC)/2 - (LWC-LWO)*0.4;
 x0(1:6) = cspice_spkezr('Earth', x0(19), frame, 'NONE', center);
 
 [~,x2_guess] = ode78(@scPropagator,[x0(19) x0(20)],x0(1:6),ode_opt,mu);
@@ -169,9 +169,52 @@ dv0_norm = norm(dv0);
 [~,x_sc_prop] = ode78(@scPropagator,[states(19) states(20)],states(1:6),ode_opt,mu);
 dv_dsm = states(10:12)-x_sc_prop(end,4:6)';
 dv_dsm_norm = norm(dv_dsm);
+x_Ai = cspice_spkezr('20099942',states(21),frame,'NONE',center) + [zeros(3,1); states(16:18)*5e-5];
+opt = odeset('RelTol',1e-8,'AbsTol',1e-9,'Events',@(t,s) minDistanceEvent(t,s));
+[T_Aimp,A_aimp] = ode78(@(t,s) nbody_rhs(t,s,bodies,frame),[states(21) states(21)*10],x_Ai,opt);
+tdca = cspice_et2utc(T_Aimp(end),'C',1);
 t0 = cspice_et2utc(states(19),'C',1);
 tdsm = cspice_et2utc(states(20),'C',1);
 timp = cspice_et2utc(states(21),'C',1);
+
+time_vec = linspace(states(19),T_Aimp(end),500);
+time_vec_a = linspace(states(19),states(21),500);
+earth = cspice_spkpos('EARTH',time_vec,frame,'NONE',center);
+apo = cspice_spkpos('20099942',time_vec_a,frame,'NONE',center);
+apo = [apo A_aimp(:,1:3)'];
+
+% plot 3d
+sc_i = x_sc_prop(:,1:3)';
+[~,x_sc_prop2] = ode78(@scPropagator,[states(20) states(21)],states(7:12),ode_opt,mu);
+sc = [sc_i x_sc_prop2(:,1:3)'];
+figure()
+hold on
+grid on
+plot3(apo(1,:),apo(2,:),apo(3,:),'Color',[0.2,0.2,0.2])
+plot3(earth(1,:),earth(2,:),earth(3,:),'Color','b')
+plot3(sc(1,:),sc(2,:),sc(3,:),'Color','r')
+plot3(sc(1,1),sc(2,1),sc(3,1),'o','MarkerSize',5,'MarkerFaceColor','g')
+plot3(sc_i(1,end),sc_i(2,end),sc_i(3,end),'o','MarkerSize',5,'MarkerFaceColor','c')
+plot3(sc(1,end),sc(2,end),sc(3,end),'o','MarkerSize',5,'MarkerFaceColor','m')
+axis equal
+
+% plot dist
+figure()
+hold on
+grid on
+dreal = vecnorm(cspice_spkpos('20099942',time_vec,'IAU_EARTH','NONE','EARTH'),2,1)./6731;
+dmod = vecnorm(cspice_spkpos('EARTH',T_Aimp',frame,'NONE',center)-A_aimp(:,1:3)',2,1)./6731;
+plot(time_vec,dreal,'b-','LineWidth',2)
+plot(T_Aimp,dmod,'r--','LineWidth',2)
+axes('position',[0.6 0.6 0.3 0.3])
+box on % put box around new pair of axes
+hold on
+grid on
+plot(time_vec,dreal,'b-','LineWidth',2)
+plot(T_Aimp,dmod,'r--','LineWidth',2)
+ylim([10 50])
+xlim([T_Aimp(find(dmod<50,1,'first')) T_Aimp(end)])
+set(gca,'color','w');
 %% functions Ex 1
 
 function [distance] = apophisEarthFindMin(t)    
@@ -247,7 +290,7 @@ ode_opt = odeset('RelTol',1e-11,'AbsTol',1e-12);
 t_dsm = x(20);
 [~,x_sc_2] = ode78(@scPropagator,[t_dsm t_imp],x2,ode_opt,mu);
 
-x_Ai = cspice_spkezr('20099942',t_imp,frame,'NONE',center) + [zeros(3,1); x_sc_2(end,4:6)'*5e-5]; %x(16:18)*5e-5
+x_Ai = cspice_spkezr('20099942',t_imp,frame,'NONE',center) + [zeros(3,1); x(16:18)*5e-5];%x_sc_2(end,4:6)'*5e-5
 opt = odeset('RelTol',1e-8,'AbsTol',1e-9,'Events',@(t,s) minDistanceEvent(t,s));
 [T,s] = ode78(@(t,s) nbody_rhs(t,s,bodies,frame),[t_imp t_imp*10],x_Ai,opt);
 
