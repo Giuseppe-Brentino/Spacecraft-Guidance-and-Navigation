@@ -149,9 +149,9 @@ end
 ode_opt = odeset('RelTol',1e-11,'AbsTol',1e-12);
 
 x0 = zeros(21,1);
-x0(19) = (LWO+LWC)/2 - (LWC-LWO)*0.4;
-x0(20) = (DSMO+DSMC)/2 - (LWC-LWO)*0.4;
-x0(21) = (IMPO+IMPC)/2 - (LWC-LWO)*0.4;
+x0(19) = (LWO+LWC)/2;% - (LWC-LWO)*0.4;
+x0(20) = (DSMO+DSMC)/2;% - (LWC-LWO)*0.4;
+x0(21) = (IMPO+IMPC)/2;% - (LWC-LWO)*0.4;
 x0(1:6) = cspice_spkezr('Earth', x0(19), frame, 'NONE', center);
 
 [~,x2_guess] = ode78(@scPropagator,[x0(19) x0(20)],x0(1:6),ode_opt,mu);
@@ -160,7 +160,7 @@ x0(7:12) = x2_guess(end,:)';
 x0(13:18) = x3_guess(end,:)';
 
 % optimization
-[states,fval,exitflag] = fmincon(@(x)guidance(x,frame,center,bodies),x0,[],[],[],[],lb,ub,@(x)nonlcon(x,mu),opt);
+[states,fval,exitflag] = fmincon(@(x)guidance(x,frame,center,bodies,mu),x0,[],[],[],[],lb,ub,@(x)nonlcon(x,mu),opt);
 
 % retrive data
 x_e =  cspice_spkezr('Earth',states(19),frame,'NONE',center);
@@ -181,7 +181,7 @@ end
 
 %% functions Ex 2
 
-function dx = scPropagator(t,x,mu)
+function dx = scPropagator(~,x,mu)
     
     r = x(1:3);
     v = x(4:6);
@@ -237,13 +237,17 @@ end
 
 end
 
-function J = guidance(x,frame,center,bodies)
+function J = guidance(x,frame,center,bodies,mu)
 
 t_imp = x(21);
 
 x2 = x(7:12);
 
-x_Ai = cspice_spkezr('20099942',t_imp,frame,'NONE',center) + [zeros(3,1); x(16:18)*5e-5];%x_sc_2(end,4:6)'*5e-5];
+ode_opt = odeset('RelTol',1e-11,'AbsTol',1e-12);
+t_dsm = x(20);
+[~,x_sc_2] = ode78(@scPropagator,[t_dsm t_imp],x2,ode_opt,mu);
+
+x_Ai = cspice_spkezr('20099942',t_imp,frame,'NONE',center) + [zeros(3,1); x_sc_2(end,4:6)'*5e-5]; %x(16:18)*5e-5
 opt = odeset('RelTol',1e-8,'AbsTol',1e-9,'Events',@(t,s) minDistanceEvent(t,s));
 [T,s] = ode78(@(t,s) nbody_rhs(t,s,bodies,frame),[t_imp t_imp*10],x_Ai,opt);
 
