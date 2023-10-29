@@ -36,9 +36,9 @@ phi0 = reshape(eye(6),36,1);
 % Initialization
 err_vxf = 1;    % Initial guess of error (higher than tolerance)
 err_vzf = 1;    % Initial guess of error (higher than tolerance)
-Nmax    = 50;   % Maximum number of iterations 
+Nmax    = 100;   % Maximum number of iterations 
 iter    = 0;    % Iteration counter
-tol     = 1e-8; % Desired tolerance
+tol     = 1e-14; % Desired tolerance
 
 % Set the update to the first guess 
 vy0_new = vy0;
@@ -49,7 +49,7 @@ tic
 while (abs(err_vxf)>tol || abs(err_vzf)>tol) && iter < Nmax
     % Vector of initial conditions
     xx0 = [x0_new;y0;z0;vx0;vy0_new;vz0;phi0];
-    opt = odeset('RelTol',1e-12,'AbsTol',1e-13,'Events',@(t,xx)planeCrossingEvent(t,xx));
+    opt = odeset('RelTol',2.22045e-14,'AbsTol',1e-15,'Events',@(t,xx)planeCrossingEvent(t,xx));
     [~,xx] = ode113(@(t,xx)CRTBP(t,xx,mu),[0,100],xx0,opt);
     xx = xx(end,:);
 
@@ -66,7 +66,7 @@ while (abs(err_vxf)>tol || abs(err_vzf)>tol) && iter < Nmax
 end
 
  xx0 = [x0_new;y0;z0;vx0;vy0_new;vz0;phi0];
-    opt = odeset('RelTol',1e-12,'AbsTol',1e-13);
+    opt = odeset('RelTol',2.22045e-14,'AbsTol',1e-15);
     [~,xx] = ode113(@(t,xx)CRTBP(t,xx,mu),[0,15],xx0,opt);
 
     figure()
