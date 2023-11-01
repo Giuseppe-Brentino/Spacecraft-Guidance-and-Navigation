@@ -8,7 +8,7 @@ clearvars; close all; clc;
 clearvars; close all; clc;
 mu = 0.012150;
 dUdx = @(x) x - (1-mu)*(x+mu)./abs(x+mu).^3 - mu*(x+mu-1)./abs(x+mu-1).^3 ;
-opt = optimoptions('fsolve','OptimalityTolerance',1e-10);
+opt = optimoptions('fsolve','OptimalityTolerance',1e-10,'Display','iter-detailed');
 L1 = fsolve(dUdx,0,opt);
 
 x_vect = -2:0.001:2;
@@ -18,67 +18,67 @@ grid on
 plot(x_vect,dUdx(x_vect))
 ylim([-30 30])
 
-%% Ex 2
+% % % % % %% Ex 2
+% % % % % 
+% % % % % clearvars; close all; clc;
+% % % % % mu = 0.012150;
+% % % % % 
+% % % % % % Initial conditions
+% % % % % x0  = 1.08892819445324;
+% % % % % y0  = 0;
+% % % % % z0  = 0.0591799623455459;
+% % % % % vx0 = 0;
+% % % % % vy0 = 0.257888699435051;
+% % % % % vz0 = 0;
+% % % % % phi0 = reshape(eye(6),36,1);
+% % % % % 
+% % % % % % correction of initial states with Pseudo-Newton method
+% % % % % % Initialization
+% % % % % err_vxf = 1;    % Initial guess of error (higher than tolerance)
+% % % % % err_vzf = 1;    % Initial guess of error (higher than tolerance)
+% % % % % Nmax    = 100;   % Maximum number of iterations 
+% % % % % iter    = 0;    % Iteration counter
+% % % % % tol     = 1e-14; % Desired tolerance
+% % % % % 
+% % % % % % Set the update to the first guess 
+% % % % % 
+% % % % % while (abs(err_vxf)>tol || abs(err_vzf)>tol) && iter < Nmax
+% % % % %     % Vector of initial conditions
+% % % % %     if iter
+% % % % %         phi = reshape(xx(7:end),6,6);
+% % % % %         phi_p = [phi(4,1), phi(4,5);phi(6,1), phi(6,5)];
+% % % % % 
+% % % % %         guess = [x0_new;vy0_new] - phi_p\[xx(4);xx(6)];
+% % % % % 
+% % % % %         x0_new = guess(1);
+% % % % %         vy0_new = guess(2);
+% % % % %     else
+% % % % %         vy0_new = vy0;
+% % % % %         x0_new  = x0;
+% % % % %     end
+% % % % %     xx0 = [x0_new;y0;z0;vx0;vy0_new;vz0;phi0];
+% % % % %     opt = odeset('RelTol',2.22045e-14,'AbsTol',1e-15,'Events',@(t,xx)planeCrossingEvent(t,xx));
+% % % % %     [~,xx] = ode113(@(t,xx)CRTBP(t,xx,mu),[0,100],xx0,opt);
+% % % % %     xx = xx(end,:);
+% % % % % 
+% % % % %     err_vxf = xx(4);
+% % % % %     err_vzf = xx(6);
+% % % % % 
+% % % % %     iter = iter + 1;
+% % % % % end
+% % % % %     opt = odeset('RelTol',2.22045e-14,'AbsTol',1e-15);
+% % % % %     [~,xx] = ode113(@(t,xx)CRTBP(t,xx,mu),[0,15],xx0,opt);
+% % % % % 
+% % % % %     figure()
+% % % % %     hold on 
+% % % % %     grid on
+% % % % %     plot3(xx(:,1),xx(:,2),xx(:,3));
+% % % % %     plot3(xx(1,1),xx(1,2),xx(1,3),'o','MarkerSize',5,'MarkerFaceColor','r');
+% % % % %     axis equal
+% % % % %     xlabel('x')
+% % % % %     ylabel('y')
 
-clearvars; close all; clc;
-mu = 0.012150;
-
-% Initial conditions
-x0  = 1.08892819445324;
-y0  = 0;
-z0  = 0.0591799623455459;
-vx0 = 0;
-vy0 = 0.257888699435051;
-vz0 = 0;
-phi0 = reshape(eye(6),36,1);
-
-% correction of initial states with Pseudo-Newton method
-% Initialization
-err_vxf = 1;    % Initial guess of error (higher than tolerance)
-err_vzf = 1;    % Initial guess of error (higher than tolerance)
-Nmax    = 100;   % Maximum number of iterations 
-iter    = 0;    % Iteration counter
-tol     = 1e-14; % Desired tolerance
-
-% Set the update to the first guess 
-
-while (abs(err_vxf)>tol || abs(err_vzf)>tol) && iter < Nmax
-    % Vector of initial conditions
-    if iter
-        phi = reshape(xx(7:end),6,6);
-        phi_p = [phi(4,1), phi(4,5);phi(6,1), phi(6,5)];
-
-        guess = [x0_new;vy0_new] - phi_p\[xx(4);xx(6)];
-
-        x0_new = guess(1);
-        vy0_new = guess(2);
-    else
-        vy0_new = vy0;
-        x0_new  = x0;
-    end
-    xx0 = [x0_new;y0;z0;vx0;vy0_new;vz0;phi0];
-    opt = odeset('RelTol',2.22045e-14,'AbsTol',1e-15,'Events',@(t,xx)planeCrossingEvent(t,xx));
-    [~,xx] = ode113(@(t,xx)CRTBP(t,xx,mu),[0,100],xx0,opt);
-    xx = xx(end,:);
-    
-    err_vxf = xx(4);
-    err_vzf = xx(6);
-   
-    iter = iter + 1;
-end
-    opt = odeset('RelTol',2.22045e-14,'AbsTol',1e-15);
-    [~,xx] = ode113(@(t,xx)CRTBP(t,xx,mu),[0,15],xx0,opt);
-
-    figure()
-    hold on 
-    grid on
-    plot3(xx(:,1),xx(:,2),xx(:,3));
-    plot3(xx(1,1),xx(1,2),xx(1,3),'o','MarkerSize',5,'MarkerFaceColor','r');
-    axis equal
-    xlabel('x')
-    ylabel('y')
-
-%% Ex 3
+%% Ex 2-3
 clearvars; close all; clc;
 mu = 0.012150;
 

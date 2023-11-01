@@ -85,7 +85,7 @@ hold on
 grid on
 plot(rad2deg(lon),rad2deg(lat))
 %% Ex 2 
-clearvars; close all; clc;
+clearvars -EXCEPT min_time; close all; clc;
 
 close_approach_epoch = datetime(2029,1,1):caldays(1):datetime(2030,1,1);
 date =  cspice_str2et( char(close_approach_epoch ) );
@@ -131,20 +131,13 @@ apophis_states = cspice_spkezr('20099942',LW_vect,frame,'NONE',center);
 min_apo_states = min(apophis_states,[],2);
 max_apo_states = max(apophis_states,[],2);
 
-scale.time = 24*3600;
-scale.dist = cspice_convrt(0.001,'AU','km');
-scale.dist = [ones(3,1)/scale.dist;ones(3,1)];
+x1_lb = min([min_earth_states min_apo_states],[],2) - [1e3*ones(3,1);10*ones(3,1)];
+x1_ub = max([max_earth_states max_apo_states],[],2) + [1e3*ones(3,1);10*ones(3,1)];
 
-x1_lb = (min([min_earth_states min_apo_states],[],2) - [1e3*ones(3,1);10*ones(3,1)])...
-    .*scale.dist;
-x1_ub = (max([max_earth_states max_apo_states],[],2) + [1e3*ones(3,1);10*ones(3,1)])...
-    .*scale.dist;
+lb = [x1_lb; x1_lb; x1_lb; LWO; DSMO; IMPO];
+ub = [x1_ub; x1_ub; x1_ub; LWC; DSMC; IMPC];
 
 
-lb = [x1_lb; x1_lb; x1_lb; LWO/scale.time; DSMO/scale.time; IMPO/scale.time];
-ub = [x1_ub; x1_ub; x1_ub; LWC/scale.time; DSMC/scale.time; IMPC/scale.time];
-
-opt = optimoptions('fmincon','Display','iter-detailed','UseParallel',true);
 parfor i = 1:4
     cspice_furnsh('kernels\naif0012.tls'); % (LSK)
     cspice_furnsh('kernels\de432s.bsp');   % (SPK)
@@ -152,23 +145,24 @@ parfor i = 1:4
     cspice_furnsh('kernels\gm_de432.tpc');
     cspice_furnsh('kernels\pck00010.tpc');
 end
-
-ode_opt = odeset('RelTol',1e-12,'AbsTol',1e-13);
+opt = optimoptions('fmincon','Display','iter-detailed','UseParallel',true);
+ode_opt = odeset('RelTol',1e-11,'AbsTol',1e-12);
 
 x0 = zeros(21,1);
-x0(19) = (LWO+LWC)/2 /scale.time + (LWC-LWO)/scale.time*0.1;
-x0(20) = (DSMO+DSMC)/2 /scale.time  + (DSMC-DSMO)/scale.time*0.1;
-x0(21) = (IMPO+IMPC)/2 /scale.time  + (IMPC-IMPO)/scale.time*0.1;
-x0(1:6) = cspice_spkezr('Earth', x0(19)*scale.time, frame, 'NONE', center).*scale.dist;
+x0(19) = (LWO+LWC)/2 - (LWC-LWO)*0.4;
+x0(20) = (DSMO+DSMC)/2 - (LWC-LWO)*0.4;
+x0(21) = (IMPO+IMPC)/2 - (LWC-LWO)*0.4;
+x0(1:6) = cspice_spkezr('Earth', x0(19), frame, 'NONE', center);
 
-[~,x2_guess] = ode78(@scPropagator,[x0(19)*scale.time x0(20)*scale.time],x0(1:6)./scale.dist,ode_opt,mu);
-x0(7:12) = x2_guess(end,:)'.*scale.dist;
-[~,x3_guess] = ode78(@scPropagator,[x0(20)*scale.time x0(21)*scale.time],x0(7:12)./scale.dist,ode_opt,mu);
-x0(13:18) = x3_guess(end,:)'.*scale.dist;
+[~,x2_guess] = ode78(@scPropagator,[x0(19) x0(20)],x0(1:6),ode_opt,mu);
+x0(7:12) = x2_guess(end,:)';
+[~,x3_guess] = ode78(@scPropagator,[x0(20) x0(21)],x0(7:12),ode_opt,mu);
+x0(13:18) = x3_guess(end,:)';
 
 % optimization
-[states,fval,exitflag] = fmincon(@(x)guidance(x,frame,center,bodies,mu,scale),x0,[],[],[],[],lb,ub,@(x)nonlcon(x,mu,scale),opt);
-
+tic
+[states,fval,exitflag] = fmincon(@(x)guidance(x,frame,center,bodies,mu),x0,[],[],[],[],lb,ub,@(x)nonlcon(x,mu),opt);
+toc
 % retrive data
 x_e =  cspice_spkezr('Earth',states(19),frame,'NONE',center);
 dv0 = states(4:6) - x_e(4:6);
@@ -184,7 +178,7 @@ t0 = cspice_et2utc(states(19),'C',1);
 tdsm = cspice_et2utc(states(20),'C',1);
 timp = cspice_et2utc(states(21),'C',1);
 
-time_vec = linspace(states(19),T_Aimp(end),500);
+time_vec = linspace(states(19),min_time,500);
 time_vec_a = linspace(states(19),states(21),500);
 earth = cspice_spkpos('EARTH',time_vec,frame,'NONE',center);
 apo = cspice_spkpos('20099942',time_vec_a,frame,'NONE',center);
@@ -219,7 +213,7 @@ hold on
 grid on
 plot(time_vec,dreal,'b-','LineWidth',2)
 plot(T_Aimp,dmod,'r--','LineWidth',2)
-ylim([1 50])
+ylim([5 50])
 xlim([T_Aimp(find(dmod<50,1,'first')) T_Aimp(end)])
 set(gca,'color','w');
 %% functions Ex 1
@@ -253,7 +247,7 @@ rr_ssb_obj = x(1:3);
 % Loop over all bodies
 for i = 1:length(bodies)
 
-    % Retrieve position and velocity of i-th celestial body wrt Solar
+% Retrieve position and velocity of i-th celestial body wrt Solar
     % System Barycentre in inertial frame
     %bodies{i}.name
     rv_ssb_body = cspice_spkezr(bodies{i}.name,t,frame,'NONE','SSB');
@@ -287,45 +281,44 @@ end
 
 end
 
-function J = guidance(x,frame,center,bodies,mu,scale)
+function J = guidance(x,frame,center,bodies,mu)
 
-t_imp = x(21)*scale.time;
+t_imp = x(21);
 
-x2 = x(7:12)./scale.dist;
+% x2 = x(7:12);
 
-ode_opt = odeset('RelTol',1e-11,'AbsTol',1e-12);
-t_dsm = x(20)*scale.time;
+% ode_opt = odeset('RelTol',1e-11,'AbsTol',1e-12);
+% t_dsm = x(20);
 % [~,x_sc_2] = ode78(@scPropagator,[t_dsm t_imp],x2,ode_opt,mu);
 
 x_Ai = cspice_spkezr('20099942',t_imp,frame,'NONE',center) + [zeros(3,1); x(16:18)*5e-5];%x_sc_2(end,4:6)'*5e-5
-opt = odeset('RelTol',1e-9,'AbsTol',1e-10,'Events',@(t,s) minDistanceEvent(t,s));
+opt = odeset('RelTol',1e-8,'AbsTol',1e-9,'Events',@(t,s) minDistanceEvent(t,s));
 [T,s] = ode78(@(t,s) nbody_rhs(t,s,bodies,frame),[t_imp t_imp*10],x_Ai,opt);
 
 J = -norm( s(end,1:3) - cspice_spkpos('EARTH',T(end),frame,'NONE',center)' );  
-
+ 
 end
 
-function [C, Ceq] = nonlcon(x,mu,scale)
+function [C, Ceq] = nonlcon(x,mu)
 
-    t0 = x(19)*scale.time;
-    tdsm = x(20)*scale.time;
-    timp = x(21)*scale.time;
-    x1 = x(1:6)./scale.dist;
-    x2 = x(7:12)./scale.dist;
-    x3 = x(13:18)./scale.dist;
+    t0 = x(19);
+    tdsm = x(20);
+    timp = x(21);
+    x1 = x(1:6);
+    x2 = x(7:12);
+    x3 = x(13:18);
 
     s_e = cspice_spkezr('EARTH',t0,'ECLIPJ2000','NONE','SSB');
     Ceq(1:3) = x(1:3) - s_e(1:3) ; %psi i
    
-    ode_opt = odeset('RelTol',1e-11,'AbsTol',1e-12);
+    ode_opt = odeset('RelTol',1e-8,'AbsTol',1e-9);
     [~,x_sc_1] = ode78(@scPropagator,[t0 tdsm],x1,ode_opt,mu);
     Ceq(4:6) = x_sc_1(end,1:3)' - x2(1:3); % z1
 
-    ode_opt = odeset('RelTol',1e-11,'AbsTol',1e-12);
     [~,x_sc_2] = ode78(@scPropagator,[tdsm timp],x2,ode_opt,mu);
     Ceq(7:12) = x_sc_2(end,:)'-x3; % z2
 
-    Ceq(13:15) = x3(1:3)./scale.dist(1:3) - cspice_spkpos('20099942',timp,'ECLIPJ2000','NONE','SSB'); %psi2
+    Ceq(13:15) = x3(1:3) - cspice_spkpos('20099942',timp,'ECLIPJ2000','NONE','SSB'); %psi2
 
     C = norm(x(4:6)-s_e(4:6)) + norm(x_sc_1(end,4:6)'-x(10:12)) - 5;
 
