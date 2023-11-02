@@ -48,31 +48,31 @@ data.t = t;
 data.ode_opt = odeset('RelTol',1e-12,'AbsTol',1e-13);
 
 %% Ex 3
+close all;
 rng default
 opt = optimoptions("fsolve",'Display','iter-detailed');
 exitflag = 0;
 i = 0;
 N_iter = 1;
-fval_vect = zeros(N_iter,1);
-guess_mat = zeros(8,N_iter);
+ fval_vect = zeros(N_iter,1);
+ guess_mat = zeros(8,N_iter);
+ % guess = [40*rand(6,1) - 20;20*rand(1); 2*pi*rand(1)+data.t0];
+
 while exitflag ~=1 && i<N_iter
+     % guess = [40*rand(6,1) - 20;20*rand(1); 2*pi*rand(1)+data.t0];
 
-    if i>=2 && fval_vect(i) < fval_vect(i-1)
-        guess = 2*sol-guess;
-    elseif i>=2 && fval_vect(i) > fval_vect(i-1)
-        guess = (sol+guess)/2;
-    else
-        guess = [40*rand(6,1) - 20;20*rand(1); 2*pi*rand(1)+data.t0];
-        % guess = [-0.0162; -10.1764; -0.0802; 5.2887; -7.8211; 0.4322; 1.875; 150.4374-data.t0];
-    end
-    % guess = [-30*ones(6,1); 6; 2*pi];
+        Tmax = 500e-6;
+        data.Tmax =Tmax*((t^2)/(m*l));
+         % guess = sol;
     [sol,fval,exitflag] = fsolve(@optimization,guess,opt,x0,data);
-
+     guess = sol;
     i = i+1;
     fval_vect(i) = norm(fval);
     guess_mat(:,i) = sol;
 end
+fval_vect = fval_vect(fval_vect~=0);
 [~,ind] = min(fval_vect);
+guess_mat = guess_mat(:,fval_vect~=0);
 sol = guess_mat(:,ind);
 [T,xx] = ode113(@TPBVP,[data.t0,sol(8)],[x0;sol(1:7)],data.ode_opt,data);
 venus = cspice_spkezr('Venus',sol(8)*t,data.frame,'NONE',data.center);
