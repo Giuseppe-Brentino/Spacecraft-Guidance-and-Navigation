@@ -145,7 +145,7 @@ parfor i = 1:4
     cspice_furnsh('kernels\gm_de432.tpc');
     cspice_furnsh('kernels\pck00010.tpc');
 end
-opt = optimoptions('fmincon','Display','iter-detailed','UseParallel',true);
+opt = optimoptions('fmincon','Display','iter-detailed','UseParallel',false);
 ode_opt = odeset('RelTol',1e-11,'AbsTol',1e-12);
 
 x0 = zeros(21,1);

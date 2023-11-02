@@ -4,7 +4,7 @@
 
 %% Ex 2 
 clearvars; close all; clc;
-% rng default;
+rng default;
 addpath('.\kernels')
 addpath('.\mice\src\mice')
 addpath('.\mice\lib')
@@ -48,24 +48,18 @@ data.t = t;
 data.ode_opt = odeset('RelTol',1e-12,'AbsTol',1e-13);
 
 %% Ex 3
-close all;
-rng default
+
 opt = optimoptions("fsolve",'Display','iter-detailed');
 exitflag = 0;
 i = 0;
-N_iter = 1;
+N_iter = 10;
  fval_vect = zeros(N_iter,1);
  guess_mat = zeros(8,N_iter);
- % guess = [40*rand(6,1) - 20;20*rand(1); 2*pi*rand(1)+data.t0];
 
 while exitflag ~=1 && i<N_iter
-     % guess = [40*rand(6,1) - 20;20*rand(1); 2*pi*rand(1)+data.t0];
-
-        Tmax = 500e-6;
-        data.Tmax =Tmax*((t^2)/(m*l));
-         % guess = sol;
+     guess = [40*rand(6,1) - 20;20*rand(1); 2*pi*rand(1)+data.t0];
     [sol,fval,exitflag] = fsolve(@optimization,guess,opt,x0,data);
-     guess = sol;
+
     i = i+1;
     fval_vect(i) = norm(fval);
     guess_mat(:,i) = sol;
@@ -83,11 +77,16 @@ if exitflag == 1
     sound(S(1).y,S(1).Fs)
 else
     fprintf('RITENTA, sarai più fortunato \n')
+    S(1) = load('gong');
+S(2) = load('handel');
+S(3).y = ((S(2).y(1:length(S(1).y),1)).*(S(1).y));
+S(3).Fs = 10000;
+sound(S(3).y,S(3).Fs)
  end
 
  % errori
- err_pos = norm(venus(1:3)-xx(end,1:3)'*l);
- err_vel = norm(venus(4:6)-xx(end,4:6)'*l/t)*1e3;
+ err_pos1 = norm(venus(1:3)-xx(end,1:3)'*l);
+ err_vel1 = norm(venus(4:6)-xx(end,4:6)'*l/t)*1e3;
  % plot traiettoria
   figure()
    hold on
@@ -106,6 +105,76 @@ else
     grid on
     plot3(xx(:,11),xx(:,12),xx(:,13))
   
+ % check hamiltonian
+ H = zeros(length(T),1);
+ for i = 1:length(T)
+     xH0 = xx(i,:);
+    dyn = TPBVP(T(i),xH0,data);
+    H(i) = 1 + dot(xx(i,8:end),dyn(1:7));
+ end
+figure()
+hold on
+grid on
+plot(T,(H-H(1))./H(1))
+
+%% Ex 4 
+close all; clc;
+
+opt = optimoptions("fsolve",'Display','iter-detailed');
+Tmax = linspace(700,500,5)*1e-6;
+
+for j = 1:length(Tmax)
+exitflag = 0;
+i = 0;
+N_iter = 10;
+ fval_vect = zeros(N_iter,1);
+ guess_mat = zeros(8,N_iter);
+ data.Tmax = Tmax(j)*((t^2)/(m*l));
+while exitflag ~=1 && i<N_iter
+    guess = sol;
+    [sol,fval,exitflag] = fsolve(@optimization,guess,opt,x0,data);
+     
+    i = i+1;
+    fval_vect(i) = norm(fval);
+    guess_mat(:,i) = sol;
+end
+end
+fval_vect = fval_vect(fval_vect~=0);
+[~,ind] = min(fval_vect);
+guess_mat = guess_mat(:,fval_vect~=0);
+sol = guess_mat(:,ind);
+[T,xx] = ode113(@TPBVP,[data.t0,sol(8)],[x0;sol(1:7)],data.ode_opt,data);
+venus = cspice_spkezr('Venus',sol(8)*t,data.frame,'NONE',data.center);
+
+if exitflag == 1
+    fprintf('CONVERGEEEEEEEEEE! \n')
+    S(1) = load('gong');
+    sound(S(1).y,S(1).Fs)
+else
+    fprintf('RITENTA, sarai più fortunato \n')
+ end
+
+ % errori
+ err_pos2 = norm(venus(1:3)-xx(end,1:3)'*l);
+ err_vel2 = norm(venus(4:6)-xx(end,4:6)'*l/t)*1e3;
+ % plot traiettoria
+  figure()
+   hold on
+   grid on
+   plot3(xx(:,1),xx(:,2),xx(:,3),'b-','DisplayName','Trajectory')
+    plot3(venus(1)/data.l,venus(2)/data.l,venus(3)/data.l,'o','MarkerFaceColor',...
+        'r','MarkerSize',5,'DisplayName','Venus at tf')
+    plot3(xx(end,1),xx(end,2),xx(end,3),'o','MarkerFaceColor',...
+        'c','MarkerSize',5,'DisplayName','S/C at tf')
+    legend('Location','best');
+    axis equal
+
+    % plot thrust direction
+    figure()
+    hold on
+    grid on
+    plot3(xx(:,11),xx(:,12),xx(:,13))
+
 %% functions
 
 function dx = TPBVP(~,x,data)
