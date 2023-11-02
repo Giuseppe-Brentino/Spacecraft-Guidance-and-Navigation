@@ -24,7 +24,7 @@ g0 = 9.81e-3; % km/s^2
 mu_s = cspice_bodvrd('SUN','GM',1);
 l = cspice_convrt(1,'AU','km');
 m = m0;
-t = sqrt(l^3/mu_s);
+t = sqrt(l^3/(mu_s));
 
 data.center = 'SUN';
 data.frame = 'ECLIPJ2000'; 
@@ -48,33 +48,64 @@ data.t = t;
 data.ode_opt = odeset('RelTol',1e-12,'AbsTol',1e-13);
 
 %% Ex 3
-
-opt = optimoptions("fsolve",'Display','iter-detailed',...
-    'MaxFunctionEvaluations',1000,'FunctionTolerance',1e-8,...
-    'OptimalityTolerance',1e-9,'UseParallel',false);
+rng default
+opt = optimoptions("fsolve",'Display','iter-detailed');
 exitflag = 0;
 i = 0;
+N_iter = 1;
+fval_vect = zeros(N_iter,1);
+guess_mat = zeros(8,N_iter);
+while exitflag ~=1 && i<N_iter
 
-venus = cspice_spkezr('VENUS',pi*t,data.frame,'NONE',data.center);
- while exitflag ~=1 && i< 1
-   figure()
+    if i>=2 && fval_vect(i) < fval_vect(i-1)
+        guess = 2*sol-guess;
+    elseif i>=2 && fval_vect(i) > fval_vect(i-1)
+        guess = (sol+guess)/2;
+    else
+        guess = [40*rand(6,1) - 20;20*rand(1); 2*pi*rand(1)+data.t0];
+        % guess = [-0.0162; -10.1764; -0.0802; 5.2887; -7.8211; 0.4322; 1.875; 150.4374-data.t0];
+    end
+    % guess = [-30*ones(6,1); 6; 2*pi];
+    [sol,fval,exitflag] = fsolve(@optimization,guess,opt,x0,data);
+
+    i = i+1;
+    fval_vect(i) = norm(fval);
+    guess_mat(:,i) = sol;
+end
+[~,ind] = min(fval_vect);
+sol = guess_mat(:,ind);
+[T,xx] = ode113(@TPBVP,[data.t0,sol(8)],[x0;sol(1:7)],data.ode_opt,data);
+venus = cspice_spkezr('Venus',sol(8)*t,data.frame,'NONE',data.center);
+
+if exitflag == 1
+    fprintf('CONVERGEEEEEEEEEE! \n')
+    S(1) = load('gong');
+    sound(S(1).y,S(1).Fs)
+else
+    fprintf('RITENTA, sarai più fortunato \n')
+ end
+
+ % errori
+ err_pos = norm(venus(1:3)-xx(end,1:3)'*l);
+ err_vel = norm(venus(4:6)-xx(end,4:6)'*l/t)*1e3;
+ % plot traiettoria
+  figure()
    hold on
    grid on
-   guess = [40*rand(6,1) - 20;20*rand(1); pi];
-    guess = [-5*ones(6,1); 5; pi];
-   [sol,fval,exitflag] = fsolve(@optimization,guess,opt,x0,data);
-    [T,xx] = ode78(@TPBVP,[data.t0,sol(8)],[x0;sol(1:7)],data.ode_opt,data);
-    
-    plot3(xx(:,1),xx(:,2),xx(:,3),'b-','DisplayName','Trajectory')
+   plot3(xx(:,1),xx(:,2),xx(:,3),'b-','DisplayName','Trajectory')
     plot3(venus(1)/data.l,venus(2)/data.l,venus(3)/data.l,'o','MarkerFaceColor',...
         'r','MarkerSize',5,'DisplayName','Venus at tf')
     plot3(xx(end,1),xx(end,2),xx(end,3),'o','MarkerFaceColor',...
         'c','MarkerSize',5,'DisplayName','S/C at tf')
-    legend;
+    legend('Location','best');
     axis equal
-    
-    i = i+1;
- end
+
+    % plot thrust direction
+    figure()
+    hold on
+    grid on
+    plot3(xx(:,11),xx(:,12),xx(:,13))
+  
 %% functions
 
 function dx = TPBVP(~,x,data)
@@ -126,10 +157,10 @@ tf = guess(8);
 
 % extract final conditions
 venus = cspice_spkezr('VENUS',tf*TU,frame,'NONE',center);
-venus = venus./[LU*ones(3,1);LU/TU*ones(3,1)];
+venus = venus./[LU*ones(3,1);(LU/TU)*ones(3,1)]; 
 rr_f = states(end,1:3)';
 vv_f = states(end,4:6)';
-ll_f = states(8:14)';
+ll_f = states(end,8:14)';
 r_f = norm(rr_f);
 lv_f = norm(ll_f(4:6));
 m_f = states(end,7);
