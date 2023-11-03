@@ -116,7 +116,7 @@ LWO = cspice_str2et( char(datetime(2024,10,1)) );
 LWC = cspice_str2et( char(datetime(2025,2,1)) );
 
 DSMO = cspice_str2et( char(datetime(2024,10,1)+calmonths(6)) );
-DSMC = cspice_str2et( char(datetime(2024,10,1)+calmonths(18)) );
+DSMC = cspice_str2et( char(datetime(2025,2,1)+calmonths(18)) );
 
 IMPO = cspice_str2et( char(datetime(2028,8,1)) );
 IMPC = cspice_str2et( char(datetime(2029,2,28)) );
@@ -149,9 +149,9 @@ opt = optimoptions('fmincon','Display','iter-detailed','UseParallel',false);
 ode_opt = odeset('RelTol',1e-11,'AbsTol',1e-12);
 
 x0 = zeros(21,1);
-x0(19) = (LWO+LWC)/2 - (LWC-LWO)*0.4;
-x0(20) = (DSMO+DSMC)/2 - (LWC-LWO)*0.4;
-x0(21) = (IMPO+IMPC)/2 - (LWC-LWO)*0.4;
+x0(19) =   (LWO+LWC)/2 - (LWC-LWO)*0.4;
+x0(20) =   (DSMO+DSMC)/2 - (LWC-LWO)*0.4;
+x0(21) =  (IMPO+IMPC)/2 - (LWC-LWO)*0.4;
 x0(1:6) = cspice_spkezr('Earth', x0(19), frame, 'NONE', center);
 
 [~,x2_guess] = ode78(@scPropagator,[x0(19) x0(20)],x0(1:6),ode_opt,mu);
@@ -161,7 +161,7 @@ x0(13:18) = x3_guess(end,:)';
 
 % optimization
 tic
-[states,fval,exitflag] = fmincon(@(x)guidance(x,frame,center,bodies,mu),x0,[],[],[],[],lb,ub,@(x)nonlcon(x,mu),opt);
+[states,fval,exitflag] = fmincon(@(x)guidance(x,frame,center,bodies),x0,[],[],[],[],lb,ub,@(x)nonlcon(x,mu),opt);
 toc
 % retrive data
 x_e =  cspice_spkezr('Earth',states(19),frame,'NONE',center);
@@ -216,6 +216,7 @@ plot(T_Aimp,dmod,'r--','LineWidth',2)
 ylim([5 50])
 xlim([T_Aimp(find(dmod<50,1,'first')) T_Aimp(end)])
 set(gca,'color','w');
+
 %% functions Ex 1
 
 function [distance] = apophisEarthFindMin(t)    
@@ -281,16 +282,9 @@ end
 
 end
 
-function J = guidance(x,frame,center,bodies,mu)
+function J = guidance(x,frame,center,bodies)
 
 t_imp = x(21);
-
-% x2 = x(7:12);
-
-% ode_opt = odeset('RelTol',1e-11,'AbsTol',1e-12);
-% t_dsm = x(20);
-% [~,x_sc_2] = ode78(@scPropagator,[t_dsm t_imp],x2,ode_opt,mu);
-
 x_Ai = cspice_spkezr('20099942',t_imp,frame,'NONE',center) + [zeros(3,1); x(16:18)*5e-5];%x_sc_2(end,4:6)'*5e-5
 opt = odeset('RelTol',1e-8,'AbsTol',1e-9,'Events',@(t,s) minDistanceEvent(t,s));
 [T,s] = ode78(@(t,s) nbody_rhs(t,s,bodies,frame),[t_imp t_imp*10],x_Ai,opt);
