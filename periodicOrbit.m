@@ -310,7 +310,7 @@ while (abs(errors(1))>tol || abs(errors(2))>tol) && iter < Nmax
 
 end
 
-if iter > Nmax
+if iter == Nmax && (abs(errors(1))>tol || abs(errors(2))>tol)
     error("The algorithm didn't converge")
 end
 
@@ -333,7 +333,8 @@ set(0,'defaultLineMarkerSize',6) ;
 set(0,'defaultLineMarkerEdgeColor','k')
 set(0,'defaultLineMarkerFaceColor','auto')
 % legend:
-set(0, 'defaultLegendLocation','best');
+set(0, 'defaultLegendLocation','southoutside');
+set(0, 'defaultLegendOrientation','horizontal');
 set(0, 'defaultLegendFontSize',12);
 % axes:
 set(0,'defaultAxesFontSize',16);
