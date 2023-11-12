@@ -75,7 +75,7 @@ plotOrbits(venus,data,xx);
  ylabel('Relative error')
 
 %% Ex 4 
-close all; clc; clearvars -except data x0 sol;
+% close all; clc; clearvars -except data x0 sol;
 rng default;
 
 % Maximum thrust vector, from 700 to the required 500mN to exploit
@@ -315,10 +315,8 @@ function plotOrbits(venus,data,xx)
 %            integration options.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-
-
-      % plot s/c trajectory
- figure('units','normalized','outerposition',[0 0 0.6 0.6*16/9])
+ % plot s/c trajectory
+ figure()
  hold on
  grid on
  plot3(venus(1,end)/data.l,venus(2,end)/data.l,venus(3,end)/data.l,'diamond','MarkerFaceColor',...
@@ -332,13 +330,13 @@ function plotOrbits(venus,data,xx)
      "#0072BD",'MarkerSize',10,'DisplayName','S/C at encounter')
  plot3(0,0,0,'o','MarkerFaceColor',...
      "#EDB120",'MarkerEdgeColor','none','MarkerSize',15,'DisplayName','Sun')
- axis equal
+
  legend('Location','best','Orientation','vertical');
  xlabel('x [AU]')
  ylabel('y [AU]')
  zlabel('z [AU]')
- view(30,20)
-
+view(30,20)
+ axis equal
 end
 
 function plotStyle

@@ -18,11 +18,11 @@ x_vect = -2:0.001:2;
 figure()
 hold on
 grid on
-plot(x_vect,dUdx,'DisplayName','Gradient of the potential U')
+plot(x_vect,dUdx,'DisplayName','$\displaystyle\frac{d\mathrm{U}}{dx}$')
 ylim([-30 30])
 plot(L1x,L1y,'o','MarkerFaceColor','r','DisplayName','L1 Point')
 xlabel('$x$')
-ylabel('$\displaystyle\frac{dU}{dx}$')
+ylabel('$\displaystyle\frac{d\mathrm{U}}{dx}$')
 legend;
 
 %% Ex 2
@@ -44,7 +44,7 @@ xx0 = [x0;y0;z0;vx0;vy0;vz0;phi0];
 %%% Correction of initial states and correct orbit propagation:
 
 % Define solver's parameters
-Nmax    = 100;      % Maximum number of iterations
+Nmax    = 1000;     % Maximum number of iterations
 tol     = 1e-14;    % Desired tolerance
 
 % Find correct initial states and propagate the orbit
@@ -87,11 +87,6 @@ Color = ["#0072BD"
     "#EDB120"
     "#7E2F8E"
     "#77AC30"
-    "#4DBEEE"
-    "#A2142F"
-    "#0080FF"
-    "#FFA040"
-    "#E57373"
     ];
 
 % Initial conditions
@@ -104,7 +99,7 @@ vz0 = 0;
 phi0 = reshape(eye(6),36,1);
 xx0 = [x0;y0;z0;vx0;vy0;vz0;phi0];
 
-zz0 = linspace(z0,0.034,10);
+zz0 = linspace(z0,0.034,5);
 z0_length = length(zz0);
 
 % zero-finding algorithm parameters
@@ -116,7 +111,6 @@ opt = odeset('RelTol',2.22045e-14,'AbsTol',1e-15,'Events',@(t,xx)planeCrossingEv
 figure()
 hold on
 grid on
-axis equal
 xlabel('x')
 ylabel('y')
 zlabel('z')
@@ -142,7 +136,8 @@ for i = 1:z0_length
     legend;
 
 end
-view(10,5)
+axis equal
+view(5,10)
 
 %% functions
 
