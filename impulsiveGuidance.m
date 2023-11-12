@@ -138,14 +138,15 @@ lb = [x1_lb; x1_lb; x1_lb; LWO; DSMO; IMPO];
 ub = [x1_ub; x1_ub; x1_ub; LWC; DSMC; IMPC];
 
 
-parfor i = 1:4
-    cspice_furnsh('kernels\naif0012.tls'); % (LSK)
-    cspice_furnsh('kernels\de432s.bsp');   % (SPK)
-    cspice_furnsh('kernels\20099942_Apophis.bsp'); % (PCK)
-    cspice_furnsh('kernels\gm_de432.tpc');
-    cspice_furnsh('kernels\pck00010.tpc');
-end
-opt = optimoptions('fmincon','Display','iter-detailed','UseParallel',false);
+% parfor i = 1:4
+%     cspice_furnsh('kernels\naif0012.tls'); % (LSK)
+%     cspice_furnsh('kernels\de432s.bsp');   % (SPK)
+%     cspice_furnsh('kernels\20099942_Apophis.bsp'); % (PCK)
+%     cspice_furnsh('kernels\gm_de432.tpc');
+%     cspice_furnsh('kernels\pck00010.tpc');
+% end
+
+opt = optimoptions('fmincon','Display','iter-detailed','SpecifyConstraintGradient',false);
 ode_opt = odeset('RelTol',1e-11,'AbsTol',1e-12);
 
 x0 = zeros(21,1);
@@ -226,7 +227,7 @@ end
 
 %% functions Ex 2
 
-function dx = scPropagator(~,x,mu)
+function dx = scPropagator(~,x,mu,varargin)
     
     r = x(1:3);
     v = x(4:6);
@@ -234,6 +235,32 @@ function dx = scPropagator(~,x,mu)
     
     dx(1:3) = v;
     dx(4:6) = - mu/r_norm^3 * r;
+    
+   
+    if length(x) == 42
+        %%% Integration of the STM
+
+        % Put the STM PHI in matrix form
+        phi = reshape(x(7:end),6,6);
+
+        % Jacobian of f
+        A = zeros(6,6);
+        A(1:3,4:6) = eye(3);
+        A(4,1) = (3*mu*r(1)^2)/r_norm^5 - mu/r_norm^3;
+        A(4,2) = (3*mu*r(1)*r(2))/r_norm^5;
+        A(4,3) = (3*mu*r(1)*r(3))/r_norm^5;
+        A(5,1) = A(4,2);
+        A(5,2) = (3*mu*r(2)^2)/r_norm^5 - mu/r_norm^3;
+        A(5,3) = (3*mu*r(2)*r(3))/r_norm^5;
+        A(6,1) = A(4,3);
+        A(6,2) = A(5,3);
+        A(6,3) = (3*mu*r(3)^2)/r_norm^5 - mu/r_norm^3;
+
+        % Compute the derivative of the STM
+        dphi = A*phi;
+        dx(7:42) = reshape(dphi,36,1);
+
+    end
 
     dx = dx';
 
@@ -293,7 +320,7 @@ J = -norm( s(end,1:3) - cspice_spkpos('EARTH',T(end),frame,'NONE',center)' );
  
 end
 
-function [C, Ceq] = nonlcon(x,mu)
+function [C, Ceq,DC,DCeq] = nonlcon(x,mu)
 
     t0 = x(19);
     tdsm = x(20);
@@ -306,15 +333,51 @@ function [C, Ceq] = nonlcon(x,mu)
     Ceq(1:3) = x(1:3) - s_e(1:3) ; %psi i
    
     ode_opt = odeset('RelTol',1e-8,'AbsTol',1e-9);
-    [~,x_sc_1] = ode78(@scPropagator,[t0 tdsm],x1,ode_opt,mu);
+    phi0 = reshape(eye(6),36,1);
+    [~,x_sc_1] = ode78(@scPropagator,[t0 tdsm],[x1;phi0],ode_opt,mu);
     Ceq(4:6) = x_sc_1(end,1:3)' - x2(1:3); % z1
 
-    [~,x_sc_2] = ode78(@scPropagator,[tdsm timp],x2,ode_opt,mu);
-    Ceq(7:12) = x_sc_2(end,:)'-x3; % z2
+    [~,x_sc_2] = ode78(@scPropagator,[tdsm timp],[x2;phi0],ode_opt,mu);
+    Ceq(7:12) = x_sc_2(end,1:6)'-x3; % z2
+    
+    s_a = cspice_spkezr('20099942',timp,'ECLIPJ2000','NONE','SSB');
 
-    Ceq(13:15) = x3(1:3) - cspice_spkpos('20099942',timp,'ECLIPJ2000','NONE','SSB'); %psi2
+    Ceq(13:15) = x3(1:3) - s_a(1:3); %psi2
 
     C = norm(x(4:6)-s_e(4:6)) + norm(x_sc_1(end,4:6)'-x(10:12)) - 5;
+    
+    % compute gradient
+    if nargout>2
+    DCeq = zeros(15,21);
+    phi1 = reshape(x_sc_1(end,7:end),6,6);
+    phi2 = reshape(x_sc_2(end,7:end),6,6);
+
+    DCeq(1:3,1:6) = phi1(1:3,1:6);
+    DCeq(1:3,7:9) = -eye(3);
+    DCeq(1:3,19) = -phi1(1:3,1:3)*x_sc_1(end,4:6)';
+    DCeq(1:3,20) = x_sc_1(end,4:6)';
+    DCeq(4:9,7:12) = phi2;
+    DCeq(4:9,13:18) = eye(6);
+    DCeq(4:9,20)= -phi2*x_sc_2(end,1:6)';
+    DCeq(4:9,21)= [x_sc_2(end,4:6)';-mu/norm(x_sc_2(end,1:3))^3*x_sc_2(end,1:3)'];
+    DCeq(10:12,1:3) = eye(3);
+    DCeq(10:12,19) = s_e(4:6);
+    DCeq(13:15,13:15) = eye(3);
+    DCeq(13:15,21) = s_a(4:6);
+    
+    DCeq = DCeq';
+    DC = zeros(21,1);
+    DC(1:3) = ( x_sc_1(end,4:6)-x(10:12)' ) / norm(x_sc_1(end,4:6)'-x(10:12)) ...
+        * phi1(4:6,1:3);
+    DC(4:6) = (x(4:6)-s_e(4:6))' / norm(x(4:6)-s_e(4:6));
+    DC(10:12) = (x_sc_1(end,4:6)-x(10:12)') / norm(x_sc_1(end,4:6)'-x(10:12));
+    DC(19) = (x(4:6)-s_e(4:6))' / norm(x(4:6)-s_e(4:6))*mu/norm(s_e(1:3))^3*s_e(1:3) ...
+        + (x_sc_1(end,4:6)-x(10:12)') / norm(x_sc_1(end,4:6)'-x(10:12)) ...
+        * ( phi1(4:6,:)* [x_sc_1(1,1:3)'; -mu/norm(x_sc_1(1,1:3))^3*x_sc_1(1,1:3)'] );
+     DC(20) = (x_sc_1(end,4:6)-x(10:12)') / norm(x_sc_1(end,4:6)'-x(10:12))...
+        * -mu/norm(x_sc_1(end,1:3))^3*x_sc_1(end,1:3)';
+    
+    end
 
 end
 
