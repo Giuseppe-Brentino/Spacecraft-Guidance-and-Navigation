@@ -30,7 +30,7 @@ date =  cspice_str2et( char(close_approach_epoch ) );
 earth = cspice_spkpos('20099942',date,'IAU_EARTH','NONE','EARTH');
 moon = cspice_spkpos('20099942',date,'IAU_EARTH','NONE','MOON');
 sun = cspice_spkpos('20099942',date,'IAU_EARTH','NONE','SUN');
-
+ 
 % compute Apophis distance with Moon-Eart-Sun during the defined time
 % window
 apophis_earth = vecnorm(earth,2,1);
@@ -121,12 +121,13 @@ CA_coord = cspice_spkpos('20099942',min_time,'IAU_EARTH','NONE','EARTH');
 plot(lon,lat,'r','DisplayName','Groundtrack')
 plot(rad2deg(lon_CA),rad2deg(lat_CA),'o','MarkerFaceColor','#EDB120',...
     'MarkerEdgeColor','#EDB120','DisplayName','Closest approach')
-xlim([-180,180])
-ylim([-90,90])
 legend('Location','northoutside');
 
 ylabel('Latitude [deg]')
 xlabel('Longitude [deg]')
+axis equal
+xlim([-180,180])
+ylim([-90,90])
 %% Ex 2
 clearvars -EXCEPT min_time; close all; clc;
 
