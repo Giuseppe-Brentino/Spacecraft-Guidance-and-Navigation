@@ -121,7 +121,7 @@ function dx = TPBVP(~,x,data)
 %                 spacecraft and environment parameters.
 %
 % OUTPUT:
-% -dx[42,1]: time derivative of the state vector.
+% -dx[14,1]: time derivative of the state vector.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % extract data
