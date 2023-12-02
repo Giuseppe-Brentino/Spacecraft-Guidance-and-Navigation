@@ -53,16 +53,51 @@ Tango_ut.P = Tango_lin.P;
 for i = 2:N+1
     % LinCov
     [Mango_lin.states(:,i),Mango_lin.P(:,:,i)] = ...
-        LinCov([Mango_lin.states(:,i-1)],Mango_lin.P(:,:,i-1),settings);
+        LinCov(Mango_lin.states(:,i-1), Mango_lin.P(:,:,i-1), settings);
     [Tango_lin.states(:,i),Tango_lin.P(:,:,i)] = ...
-        LinCov(Tango_lin.states(:,i-1),Tango_lin.P(:,:,i-1),settings);
+        LinCov(Tango_lin.states(:,i-1), Tango_lin.P(:,:,i-1), settings);
 
     % UT
     [Mango_ut.states(:,i),Mango_ut.P(:,:,i)] = ...
-        UT([Mango_ut.states(:,i-1)],Mango_ut.P(:,:,i-1),settings);
+        UT(Mango_ut.states(:,i-1), Mango_ut.P(:,:,i-1), settings);
     [Tango_ut.states(:,i),Tango_ut.P(:,:,i)] = ...
-        UT(Tango_ut.states(:,i-1),Tango_ut.P(:,:,i-1),settings);
+        UT(Tango_ut.states(:,i-1), Tango_ut.P(:,:,i-1), settings);
 end
+
+%% Ex 2
+delta_r_lin = zeros(N+1,1);
+P_sum_lin = zeros(6,6,N+1);
+delta_r_lin_lim =  zeros(N+1,1);
+
+delta_r_ut= zeros(N+1,1);
+P_sum_ut = zeros(6,6,N+1);
+delta_r_ut_lim =  zeros(N+1,1);
+
+flag.found_delta_r_lin = false;
+flag.found_delta_r_ut = false;
+
+for i = 1:N+1
+    delta_r_lin(i) = norm( Mango_lin.states(1:3,i) - Tango_lin.states(1:3,i) );
+    delta_r_ut(i) = norm( Mango_ut.states(1:3,i) - Tango_ut.states(1:3,i) );
+    
+    P_sum_lin(:,:,i) = Tango_lin.P(:,:,i) + Mango_lin.P(:,:,i);
+    P_sum_ut(:,:,i) = Tango_ut.P(:,:,i) + Mango_ut.P(:,:,i);
+    
+    delta_r_lin_lim(i) = 3 * sqrt( max( eig( P_sum_lin(:,:,i) ) ) );
+    delta_r_ut_lim(i) = 3 * sqrt( max( eig( P_sum_ut(:,:,i) ) ) );
+
+    if delta_r_lin(i) < delta_r_lin_lim(i) && ~flag.found_delta_r_lin
+        flag.found_delta_r_lin = true;
+        N_lin_lim = i-1;
+    end
+
+    if delta_r_ut(i) < delta_r_ut_lim(i) && ~flag.found_delta_r_ut
+        flag.found_delta_r_ut = true;
+        N_lin_ut = i-1;
+    end
+end
+
+
 %% functions
 function [dxx] = TBP(~,xx,mu)
 
@@ -114,17 +149,48 @@ phi = reshape(x(7:end),6,6);
 P = phi*P0*phi';
 end
 
-function [x,P] = UT(x0,P0,settings)
+function [y_mean,P] = UT(x0,P0,settings)
 
-Chi = zeros(6,13);
-Chi(:,1) = x0;
+ode_opt = settings.ode_opt;
+tf = settings.T1;
+mu = settings.mu;
+alpha = settings.ut.alpha;
+beta = settings.ut.beta;
 
+n = length(x0);
+lambda = alpha^2*n-n;
+mat = sqrtm((n+lambda)*P0);
+
+chi = zeros(n,2*n+1);
+gamma = zeros(n,2*n+1);
+weight_mean = zeros(2*n+1,1);
+weight_cov = zeros(2*n+1,1);
+y_mean = zeros(n,1);
+P = zeros(6);
+
+chi(:,1) = x0;
+for i = 1:n
+    chi(:,i+1) = x0 + mat(:,i);
+    chi(:,i+1+n) = x0 - mat(:,i);
 end
 
+weight_mean(1) = lambda/(n+lambda);
+weight_cov(1) = weight_mean(1) + (1-alpha^2+beta);
 
+weight_mean(2:end) = 1/(2*(n+lambda)) * ones(2*n,1);
+weight_cov(2:end) = weight_mean(2:end);
 
+for i = 1:2*n+1
+    [~,x] = ode78(@TBP,[0,tf],chi(:,i),ode_opt,mu);
+    gamma(:,i) = x(end,:)';
+    y_mean = y_mean + weight_mean(i)*gamma(:,i);
+end
 
+for i = 1:2*n+1
+    P = P + weight_cov(i)*(gamma(:,i)-y_mean)*(gamma(:,i)-y_mean)';
+end
 
+end
 
 function plotStyle
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
