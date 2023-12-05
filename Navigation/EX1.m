@@ -47,21 +47,23 @@ settings.ode_opt = odeset('RelTol',1e-12,'AbsTol',1e-12);
 
 Mango_ut.states = [ [r1_0;v1_0;] , zeros(6,N)];
 Mango_ut.P = Mango_lin.P;
+Mango_ut.sigma_points = false;
 Tango_ut.states = [ [r2_0;v2_0;] , zeros(6,N)];
 Tango_ut.P = Tango_lin.P;
+Tango_ut.sigma_points = false;
 
 for i = 2:N+1
     % LinCov
     [Mango_lin.states(:,i),Mango_lin.P(:,:,i)] = ...
-        LinCov(Mango_lin.states(:,i-1), Mango_lin.P(:,:,i-1), settings);
+        LinCov([Mango_lin.states(1:6,i-1);phi0], Mango_lin.P(:,:,i-1), settings);
     [Tango_lin.states(:,i),Tango_lin.P(:,:,i)] = ...
-        LinCov(Tango_lin.states(:,i-1), Tango_lin.P(:,:,i-1), settings);
+        LinCov([Tango_lin.states(1:6,i-1);phi0], Tango_lin.P(:,:,i-1), settings);
 
     % UT
-    [Mango_ut.states(:,i),Mango_ut.P(:,:,i)] = ...
-        UT(Mango_ut.states(:,i-1), Mango_ut.P(:,:,i-1), settings);
-    [Tango_ut.states(:,i),Tango_ut.P(:,:,i)] = ...
-        UT(Tango_ut.states(:,i-1), Tango_ut.P(:,:,i-1), settings);
+    [Mango_ut.states(:,i),Mango_ut.P(:,:,i),Mango_ut.sigma_points] = ...
+        UT(Mango_ut.states(:,i-1), Mango_ut.P(:,:,i-1),Mango_ut.sigma_points, settings);
+    [Tango_ut.states(:,i),Tango_ut.P(:,:,i),Tango_ut.sigma_points] = ...
+        UT(Tango_ut.states(:,i-1), Tango_ut.P(:,:,i-1),Mango_ut.sigma_points, settings);
 end
 
 %% Ex 2
@@ -149,7 +151,7 @@ phi = reshape(x(7:end),6,6);
 P = phi*P0*phi';
 end
 
-function [y_mean,P] = UT(x0,P0,settings)
+function [y_mean,P,sigma_points] = UT(x0,P0,sigma_points,settings)
 
 ode_opt = settings.ode_opt;
 tf = settings.T1;
@@ -161,17 +163,21 @@ n = length(x0);
 lambda = alpha^2*n-n;
 mat = sqrtm((n+lambda)*P0);
 
-chi = zeros(n,2*n+1);
 gamma = zeros(n,2*n+1);
 weight_mean = zeros(2*n+1,1);
 weight_cov = zeros(2*n+1,1);
 y_mean = zeros(n,1);
 P = zeros(6);
 
+if ~sigma_points
+chi = zeros(n,2*n+1);
 chi(:,1) = x0;
 for i = 1:n
     chi(:,i+1) = x0 + mat(:,i);
     chi(:,i+1+n) = x0 - mat(:,i);
+end
+else
+    chi=sigma_points;
 end
 
 weight_mean(1) = lambda/(n+lambda);
@@ -189,6 +195,8 @@ end
 for i = 1:2*n+1
     P = P + weight_cov(i)*(gamma(:,i)-y_mean)*(gamma(:,i)-y_mean)';
 end
+
+sigma_points = gamma;
 
 end
 
