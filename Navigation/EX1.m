@@ -47,10 +47,10 @@ settings.ode_opt = odeset('RelTol',1e-12,'AbsTol',1e-12);
 
 Mango_ut.states = [ [r1_0;v1_0;] , zeros(6,N)];
 Mango_ut.P = Mango_lin.P;
-Mango_ut.sigma_points = false;
+Mango_ut.sigma_points = [];
 Tango_ut.states = [ [r2_0;v2_0;] , zeros(6,N)];
 Tango_ut.P = Tango_lin.P;
-Tango_ut.sigma_points = false;
+Tango_ut.sigma_points = [];
 
 for i = 2:N+1
     % LinCov
@@ -63,16 +63,16 @@ for i = 2:N+1
     [Mango_ut.states(:,i),Mango_ut.P(:,:,i),Mango_ut.sigma_points] = ...
         UT(Mango_ut.states(:,i-1), Mango_ut.P(:,:,i-1),Mango_ut.sigma_points, settings);
     [Tango_ut.states(:,i),Tango_ut.P(:,:,i),Tango_ut.sigma_points] = ...
-        UT(Tango_ut.states(:,i-1), Tango_ut.P(:,:,i-1),Mango_ut.sigma_points, settings);
+        UT(Tango_ut.states(:,i-1), Tango_ut.P(:,:,i-1),Tango_ut.sigma_points, settings);
 end
 
 %% Ex 2
 delta_r_lin = zeros(N+1,1);
-P_sum_lin = zeros(6,6,N+1);
+P_sum_lin = zeros(3,3,N+1);
 delta_r_lin_lim =  zeros(N+1,1);
 
 delta_r_ut= zeros(N+1,1);
-P_sum_ut = zeros(6,6,N+1);
+P_sum_ut = zeros(3,3,N+1);
 delta_r_ut_lim =  zeros(N+1,1);
 
 flag.found_delta_r_lin = false;
@@ -82,8 +82,8 @@ for i = 1:N+1
     delta_r_lin(i) = norm( Mango_lin.states(1:3,i) - Tango_lin.states(1:3,i) );
     delta_r_ut(i) = norm( Mango_ut.states(1:3,i) - Tango_ut.states(1:3,i) );
     
-    P_sum_lin(:,:,i) = Tango_lin.P(:,:,i) + Mango_lin.P(:,:,i);
-    P_sum_ut(:,:,i) = Tango_ut.P(:,:,i) + Mango_ut.P(:,:,i);
+    P_sum_lin(:,:,i) = Tango_lin.P(1:3,1:3,i) + Mango_lin.P(1:3,1:3,i);
+    P_sum_ut(:,:,i) = Tango_ut.P(1:3,1:3,i) + Mango_ut.P(1:3,1:3,i);
     
     delta_r_lin_lim(i) = 3 * sqrt( max( eig( P_sum_lin(:,:,i) ) ) );
     delta_r_ut_lim(i) = 3 * sqrt( max( eig( P_sum_ut(:,:,i) ) ) );
@@ -99,8 +99,25 @@ for i = 1:N+1
     end
 end
 
+%% Ex 3
+settings.n_sim = 200;
 
+Mango_mc.x_0 = mvnrnd([r1_0;v1_0],P0,settings.n_sim)';
+Tango_mc.x_0 = mvnrnd([r2_0;v2_0],P0,settings.n_sim)';
+Mango_mc.x_mean = [ [r1_0;v1_0], zeros(6,N)];
+Tango_mc.x_mean = [ [r2_0;v2_0], zeros(6,N)];
+Mango_mc.P = zeros(6,6,N+1);
+Mango_mc.P(:,:,1) = P0;
+Tango_mc.P = Mango_mc.P;
+
+for i = 2:N+1
+    [Mango_mc.x_mean(:,i),Mango_mc.P(:,:,i),states] = MonteCarlo(Mango_mc.x_0,settings);
+    Mango_mc.x_0 = states;
+    [Tango_mc.x_mean(:,i),Mango_mc.P(:,:,i),states] = MonteCarlo(Tango_mc.x_0,settings);
+    Tango_mc.x_0 = states;
+end
 %% functions
+
 function [dxx] = TBP(~,xx,mu)
 
 x = xx(1);
@@ -169,7 +186,7 @@ weight_cov = zeros(2*n+1,1);
 y_mean = zeros(n,1);
 P = zeros(6);
 
-if ~sigma_points
+if isempty(sigma_points)
 chi = zeros(n,2*n+1);
 chi(:,1) = x0;
 for i = 1:n
@@ -198,6 +215,21 @@ end
 
 sigma_points = gamma;
 
+end
+
+function [x_mean, covariance, states] = MonteCarlo(x0,settings)
+
+ode_opt = settings.ode_opt;
+tf = settings.T1;
+mu = settings.mu;
+n_sim = settings.n_sim;
+states = zeros(6,n_sim);
+parfor i = 1:n_sim
+    [~,x] = ode78(@TBP,[0,tf],x0(:,i),ode_opt,mu);
+    states(:,i) = x(end,:)';
+end
+x_mean = mean(states,2);
+covariance = cov(states');
 end
 
 function plotStyle
