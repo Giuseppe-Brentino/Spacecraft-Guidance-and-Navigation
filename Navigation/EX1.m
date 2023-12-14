@@ -3,7 +3,7 @@
 % Author: Giuseppe Brentino
 
 clearvars; close all; clc;
-addpath('.\kernels\')
+% addpath('.\kernels\')
 addpath('.\sgp4\')
 addpath('.\tle\')
 addpath('.\mice\src\mice')
@@ -43,7 +43,7 @@ Mango_lin.P = [zeros(n,n,N+1)];
 Mango_lin.P(:,:,1) = P0;
 Tango_lin.states = [ [r2_0;v2_0;phi0] , zeros(42,N)];
 Tango_lin.P = Mango_lin.P;
-settings.ode_opt = odeset('RelTol',1e-12,'AbsTol',1e-12);
+settings.ode_opt = odeset('RelTol',1e-12,'AbsTol',1e-13);
 
 Mango_ut.states = [ [r1_0;v1_0;] , zeros(6,N)];
 Mango_ut.P = Mango_lin.P;
@@ -85,8 +85,8 @@ for i = 1:N+1
     P_sum_lin(:,:,i) = Tango_lin.P(1:3,1:3,i) + Mango_lin.P(1:3,1:3,i);
     P_sum_ut(:,:,i) = Tango_ut.P(1:3,1:3,i) + Mango_ut.P(1:3,1:3,i);
     
-    delta_r_lin_lim(i) = 3 * sqrt( max( eig( P_sum_lin(:,:,i) ) ) );
-    delta_r_ut_lim(i) = 3 * sqrt( max( eig( P_sum_ut(:,:,i) ) ) );
+    delta_r_lin_lim(i) = 3 * sqrt( eigs( P_sum_lin(:,:,i),1 ) );
+    delta_r_ut_lim(i) = 3 * sqrt( eigs( P_sum_ut(:,:,i),1 ) );
 
     if delta_r_lin(i) < delta_r_lin_lim(i) && ~flag.found_delta_r_lin
         flag.found_delta_r_lin = true;
@@ -100,7 +100,7 @@ for i = 1:N+1
 end
 
 %% Ex 3
-settings.n_sim = 200;
+settings.n_sim = 1000;
 
 Mango_mc.x_0 = mvnrnd([r1_0;v1_0],P0,settings.n_sim)';
 Tango_mc.x_0 = mvnrnd([r2_0;v2_0],P0,settings.n_sim)';
@@ -110,12 +110,85 @@ Mango_mc.P = zeros(6,6,N+1);
 Mango_mc.P(:,:,1) = P0;
 Tango_mc.P = Mango_mc.P;
 
-for i = 2:N+1
-    [Mango_mc.x_mean(:,i),Mango_mc.P(:,:,i),states] = MonteCarlo(Mango_mc.x_0,settings);
-    Mango_mc.x_0 = states;
-    [Tango_mc.x_mean(:,i),Mango_mc.P(:,:,i),states] = MonteCarlo(Tango_mc.x_0,settings);
-    Tango_mc.x_0 = states;
+% % % % for i = 2:N+1
+% % % %     [Mango_mc.x_mean(:,i),Mango_mc.P(:,:,i),states] = MonteCarlo(Mango_mc.x_0,settings);
+% % % %     Mango_mc.x_0 = states;
+% % % %     [Tango_mc.x_mean(:,i),Tango_mc.P(:,:,i),states] = MonteCarlo(Tango_mc.x_0,settings);
+% % % %     Tango_mc.x_0 = states;
+% % % % end
+
+%% plot
+Mango_lin.Pr_eig = zeros(N+1,1);
+Mango_lin.Pv_eig = zeros(N+1,1);
+Mango_ut.Pr_eig = zeros(N+1,1);
+Mango_ut.Pv_eig = zeros(N+1,1);
+Mango_mc.Pr_eig = zeros(N+1,1);
+Mango_mc.Pv_eig = zeros(N+1,1);
+
+Tango_lin.Pr_eig = zeros(N+1,1);
+Tango_lin.Pv_eig = zeros(N+1,1);
+Tango_ut.Pr_eig = zeros(N+1,1);
+Tango_ut.Pv_eig = zeros(N+1,1);
+Tango_mc.Pr_eig = zeros(N+1,1);
+Tango_mc.Pv_eig = zeros(N+1,1);
+
+for i = 1:N+1    
+    Mango_mc.Pr_eig(i) = 3*sqrt( eigs(Mango_mc.P(1:3,1:3,i),1) );
+    Mango_mc.Pv_eig(i) = 3*sqrt( eigs(Mango_mc.P(4:6,4:6,i),1) );
+    Mango_ut.Pr_eig(i) = 3*sqrt( eigs(Mango_ut.P(1:3,1:3,i),1) );
+    Mango_ut.Pv_eig(i) = 3*sqrt( eigs(Mango_ut.P(4:6,4:6,i),1) );
+    Mango_lin.Pr_eig(i) = 3*sqrt( eigs(Mango_lin.P(1:3,1:3,i),1) );
+    Mango_lin.Pv_eig(i) = 3*sqrt( eigs(Mango_lin.P(4:6,4:6,i),1) );
+
+    Tango_mc.Pr_eig(i) = 3*sqrt( eigs(Tango_mc.P(1:3,1:3,i),1) );
+    Tango_mc.Pv_eig(i) = 3*sqrt( eigs(Tango_mc.P(4:6,4:6,i),1) );
+    Tango_ut.Pr_eig(i) = 3*sqrt( eigs(Tango_ut.P(1:3,1:3,i),1) );
+    Tango_ut.Pv_eig(i) = 3*sqrt( eigs(Tango_ut.P(4:6,4:6,i),1) );
+    Tango_lin.Pr_eig(i) = 3*sqrt( eigs(Tango_lin.P(1:3,1:3,i),1) );
+    Tango_lin.Pv_eig(i) = 3*sqrt( eigs(Tango_lin.P(4:6,4:6,i),1) );
 end
+
+orbit_index = 0:N;
+figure()
+hold on
+grid on
+subplot(2,2,1)
+hold on
+plot(orbit_index, Mango_lin.Pr_eig)
+plot(orbit_index, Mango_ut.Pr_eig,'--')
+plot(orbit_index, Mango_mc.Pr_eig)
+title('Mango Pr')
+legend('LinCov','UT','MC')
+subplot(2,2,2)
+hold on
+plot(orbit_index, Mango_lin.Pv_eig)
+plot(orbit_index, Mango_ut.Pv_eig,'--')
+plot(orbit_index, Mango_mc.Pv_eig)
+title('Mango Pv')
+legend('LinCov','UT','MC')
+subplot(2,2,3)
+hold on
+plot(orbit_index, Tango_lin.Pr_eig)
+plot(orbit_index, Tango_ut.Pr_eig,'--')
+plot(orbit_index, Tango_mc.Pr_eig)
+title('Tango Pr')
+legend('LinCov','UT','MC')
+subplot(2,2,4)
+hold on
+plot(orbit_index, Tango_lin.Pv_eig)
+plot(orbit_index, Tango_ut.Pv_eig,'--')
+plot(orbit_index, Tango_mc.Pv_eig)
+title('Tango Pv')
+legend('LinCov','UT','MC')
+
+
+%% Covariance ellipse DA CAPIRE
+figure()
+hold on
+grid on
+axis equal
+plot3(Mango_mc.x_0(1,:),Mango_mc.x_0(2,:),Mango_mc.x_0(3,:),'k');
+
 %% functions
 
 function [dxx] = TBP(~,xx,mu)
