@@ -1,5 +1,5 @@
 % Spacecraft Guidance and Navigation (2023/2024)
-% Assignment #2: Exercise 1
+% Assignment #2: Exercise 2
 % Author: Giuseppe Brentino
 
 clearvars; close all; clc;
