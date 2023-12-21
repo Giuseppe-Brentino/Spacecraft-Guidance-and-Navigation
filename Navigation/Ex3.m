@@ -18,12 +18,12 @@ plotStyle;
 Mango.TLE = cell(2,1);   
 Mango.TLE{1} = '1 36599U 10028B   10224.22752732 -.00000576  00000-0 -16475-3 0  9998';
 Mango.TLE{2} = '2 36599 098.2803 049.5758 0043871 021.7908 338.5082 14.40871350  8293';
-Mango.r0  = [4622.232026629; 5399.3369588058; -0.0212138165769957];
-Mango.v0  = [0.812221125483763; -0.721512914578826; 7.42665302729053];
+Mango.rsep  = [4622.232026629; 5399.3369588058; -0.0212138165769957];
+Mango.vsep  = [0.812221125483763; -0.721512914578826; 7.42665302729053];
 
-Mango.s_sep = [Mango.r0; Mango.v0];
+Mango.s_sep = [Mango.rsep; Mango.vsep];
 
-P0 = [ +5.6e-7, +3.5e-7, -7.1e-8,    0,        0,        0;
+P_sep = [ +5.6e-7, +3.5e-7, -7.1e-8,    0,        0,        0;
        +3.5e-7, +9.7e-7, +7.6e-8,    0,        0,        0;
        -7.1e-8, +7.6e-8, +8.1e-8,    0,        0,        0;
            0,       0,       0,  +2.8e-11,     0,        0;
@@ -42,9 +42,9 @@ Svalbard.min_el = 5;
 
 t0 = cspice_str2et('2010-08-12T05:30:00.000');
 tf = cspice_str2et('2010-08-12T06:30:00.000');
-t_sep= cspice_str2et('August 12 05:27:39.114 UTC 2010');
+t_sep = cspice_str2et('August 12 05:27:39.114 UTC 2010');
 
-ode_opt = odeset('RelTol',1e-12,'AbsTol',1e-12);
+ode_opt = odeset('RelTol',1e-12,'AbsTol',[ones(3,1)*1e-9; ones(3,1)*1e-12]);
 mu = cspice_bodvrd('Earth','GM',1);
 J2 = 0.0010826269;
 Re = cspice_bodvrd('Earth','RADII',3);
@@ -54,20 +54,20 @@ Re = Re(1);
 
 % propagate orbit
 t_span = t0:5:tf;
-[~,s1] = ode113(@PTBP,[t_sep t0],[Mango.r0; Mango.v0],ode_opt,mu,J2,Re);
+[~,s1] = ode113(@TBP,[t_sep t0],[Mango.rsep; Mango.vsep],ode_opt,mu);
 Mango.s0 = s1(end,:)';
-[~,Mango.states_2bp] = ode113(@PTBP,t_span,Mango.s0,ode_opt,mu,J2,Re);
+[~,Mango.states_2bp] = ode113(@TBP,t_span,Mango.s0,ode_opt,mu);
 Mango.states_2bp = Mango.states_2bp';
 
 % compute first visibility window
-[Svalbard.eci,Svalbard.eci2topo] = stationCoordinates (Svalbard,t_span);
+[Svalbard.eci,Svalbard.eci2topo] = stationCoordinates (Svalbard.name,t_span);
 
 Svalbard.Mango_coord_2bp = scLocalCoordinates(Svalbard,Mango.states_2bp);
 
-[visibility_window,~] = visibility(Svalbard.Mango_coord_2bp,t_span,Svalbard.min_el);
+[Svalbard.visibility_time,~] = visibility(Svalbard.Mango_coord_2bp,Svalbard.min_el,t_span);
 
 %%% b) Simulate measurements
-[Mango.states_sgp4,Mango.gs_measurements,Svalbard] = simulateGSMeasurements(Mango.TLE,Svalbard,visibility_window);
+[Mango.states_sgp4,Mango.gs_measurements,Svalbard] = simulateGSMeasurements(Mango.TLE,Svalbard);
 
 %%% c) UKF
 
@@ -81,8 +81,10 @@ lambda = alpha^2*settings_ut.n-settings_ut.n;
 settings_ut.J2 = J2;
 settings_ut.Re = Re;
 settings_ut.ode_opt = ode_opt;
+settings_ut.lambda = lambda;
 
 n = settings_ut.n;
+
 % Define weights
 weights.mean = zeros(2*n+1,1);
 weights.cov = zeros(2*n+1,1);
@@ -103,7 +105,8 @@ x = zeros(6,len);
 sigma_points = zeros(6,13,len);
 
 % compute initial values
-mat = sqrtm((n+lambda)*P0);
+P_sep = 1e4*P_sep;
+mat = sqrtm((n+lambda)*P_sep);
     sigma_points(:,1,1) = Mango.s_sep;
     for i = 1:n
         sigma_points(:,i+1,1) = Mango.s_sep + mat(:,i);
@@ -113,9 +116,6 @@ mat = sqrtm((n+lambda)*P0);
 % propagate from separation time to t0
 [sigma_points(:,:,1), P(:,:,1), x(:,1)] = UT(t_sep,t0,sigma_points(:,:,1),...
     settings_ut,weights);
-P(:,:,1) = P(:,:,1)*1e4;
-
-
 
 % initialize performance parameters
 sigma_r = zeros(len-1,1);
@@ -125,7 +125,7 @@ sigma_v = zeros(len-1,1);
 for i=2:len
     Svalbard.eci = Svalbard.eci_vis(:,i-1);
     Svalbard.eci2topo = Svalbard.eci2topo_vis(:,:,i-1);
-    [x(:,i),P(:,:,i),sigma_points(:,:,i)] =UKF(sigma_points(:,:,i-1),...
+    [x(:,i),P(:,:,i),sigma_points(:,:,i)] =UKF(x(:,i-1),P(:,:,i-1),...
         settings_ut,Mango.gs_measurements(i-1:i,:),weights,Svalbard);
 
     sigma_r(i-1) = 3*sqrt(trace(P(1:3,1:3,i)));
@@ -133,13 +133,6 @@ for i=2:len
 end
 
 % Plot
-figure()
-hold on 
-grid on
-plot(Mango.gs_measurements(2:end,1),Mango.states_sgp4(3,:))
-plot(Mango.gs_measurements(2:end,1),x(3,2:end),'--')
-legend('SGP4','UKF')
-
 error_r = vecnorm(Mango.states_sgp4(1:3,:)-x(1:3,2:end),2,1);
 figure()
 semilogy(Mango.gs_measurements(2:end,1),error_r)
@@ -183,40 +176,87 @@ set(0, 'defaultLegendFontSize',12);
 set(0,'defaultAxesFontSize',16);
 end
 
-function [dxx] = PTBP(t,xx,mu,J2,Re)
+function [dxx] = TBP(~,xx,mu)
+% TBP - Computes the equations of motion for the Two-Body Problem (TBP)
+%       and optionally the state transition matrix (STM) derivative.
+%
+%   Inputs:
+%       - ~: Time variable (not used in this function).
+%       - xx: State vector. If the STM is included, xx has 42 elements;
+%             otherwise, it has 6 elements.
+%       - mu: Gravitational parameter.
+%
+%   Output:
+%       - dxx: Derivative of the state vector. If the STM is included, dxx
+%              has 42 elements; otherwise, it has 6 elements.
+%
 
 x = xx(1);
 y = xx(2);
 z = xx(3);
-r = [x;y;z];
+r_norm = norm([x;y;z]);
+
+% Equation of motion
+dxx(1:3) = xx(4:6);
+dxx(4:6) = -mu/r_norm^3 * [x;y;z];
+
+dxx = dxx';
+    
+end
+
+function [dxx] = PTBP(t,xx,mu,J2,Re)
+% PTBP - Perturbed Two-Body Problem equations of motion with J2 perturbation
+%
+% Inputs:
+%   t   - Time. 
+%   xx  - State vector.
+%   mu  - Gravitational parameter of the central body.
+%   J2  - J2 perturbation coefficient.
+%   Re  - Equatorial radius of the central body.
+%
+% Output:
+%   dxx - Derivative of the state vector 
+
+x = xx(1);
+y = xx(2);
+z = xx(3);
+r = [x; y; z];
 r_norm = norm(r);
 
-%J2
-rotm= cspice_pxform('J2000', 'ITRF93', t);
-r_ecef = rotm*r;
+% J2 Perturbation
+rotm = cspice_pxform('J2000', 'ITRF93', t);
+r_ecef = rotm * r;
+a_j2_ecef = 3/2 * J2 * mu * Re^2 / r_norm^5 * r_ecef .* (-[1; 1; 3] + 5 * r_ecef(3)^2 / r_norm^2);
+a_j2 = rotm' * a_j2_ecef;
 
-a_j2_ecef = 3/2 * J2 * mu * Re^2/r_norm^5 * r_ecef.*( -[1;1;3] + 5*r_ecef(3)^2/r_norm^2); 
-
-a_j2 = rotm'*a_j2_ecef;
-
-% RHS
+% Equations of motion
 dxx(1:3) = xx(4:6);
-dxx(4:6) = -mu/r_norm^3 * [x;y;z] + a_j2;
+dxx(4:6) = -mu / r_norm^3 * [x; y; z] + a_j2;
 
 dxx = dxx';
 
 end
 
-function [station_eci,station_eci2topo] = stationCoordinates (station,t_span)
+function [station_eci, station_eci2topo] = stationCoordinates(station_name, t_span)
+% stationCoordinates - Compute station coordinates in ECI and
+% transformation to topocentric frame
+%
+% Inputs:
+%   station_name  - Station name (e.g., 'STATION1').
+%   t_span        - Time span for which coordinates are computed
+%
+% Outputs:
+%   station_eci       - Station coordinates in ECI frame
+%   station_eci2topo  - Transformation matrix from ECI to topocentric frame
 
-% Define station name
-station.topo_frame = [station.name, '_TOPO'];
+% Define topocentric frame name based on station name
+station_topo_frame = [station_name, '_TOPO'];
 
 % Transformation from ECI to topocentric frame
-station_eci2topo = cspice_sxform('J2000', station.topo_frame, t_span);
+station_eci2topo = cspice_sxform('J2000', station_topo_frame, t_span);
 
 % Compute station position in ECI
-station_eci = cspice_spkezr(station.name, t_span, 'J2000', 'NONE', 'EARTH');
+station_eci = cspice_spkezr(station_name, t_span, 'J2000', 'NONE', 'EARTH');
 
 end
 
@@ -237,7 +277,7 @@ sat_Az = wrapTo360( sat_coord(2,:)*cspice_dpr );
 sat_El = sat_coord(3,:)*cspice_dpr;
 sat_range = sat_coord(1,:);
 sat_coord = [sat_range;sat_Az;sat_El];
-if nargout == 3 
+if nargout == 4 
     if nargin == 3
     measures = mvnrnd(sat_coord(1:3,:)',station.R);
     visibility = measures(:,3)>=station.min_el;
@@ -246,8 +286,8 @@ if nargout == 3
     measures = measures(visibility,:);
     vis_time = varargin{1}(visibility)';
     varargout{1} = [vis_time, measures];
-   
     varargout{2} = station;
+    varargout{3} = visibility;
     else
         error('Visibility window required to compure measurements')
     end
@@ -255,76 +295,130 @@ end
 
 end
 
-function [visibility_time, coord] = visibility(sat_coord,t_span,min_el)
-    
-    visibility_condition = sat_coord(3,:)>=min_el;
-    index_i = find(visibility_condition==true,1,'first');
-    index_f = index_i + find(visibility_condition(index_i:end)==false,1,'first');
-    visibility_time = t_span(index_i:index_f-1);
-    coord = sat_coord(:,index_i:index_f-1);
+function [visibility_time, coord] = visibility(sat_coord, min_el, t_span)
+% visibility - Extract visibility time and coordinates based on minimum elevation.
+%
+% Inputs:
+%   sat_coord   - Matrix containing range, azimuth, elevation
+%   min_el      - Minimum elevation for visibility
+%   t_span      - Time span
+%
+% Outputs:
+%   visibility_time - Extracted visibility times
+%   coord           - Corresponding coordinates
+
+% Extract visibility condition based on minimum elevation
+visibility_condition = sat_coord(3, :) >= min_el;
+
+% Extract visibility time and coordinates
+visibility_time = t_span(visibility_condition);
+coord = sat_coord(:, visibility_condition);
 
 end
 
-function [states,measure,station] = simulateGSMeasurements(TLE,station,t_span)
+function [r_eci, v_eci, initial_epoch] = TLE2Cartesian(TLE, varargin)
+% TLE2Cartesian - Convert Two-Line Element (TLE) to Cartesian state vectors
+%
+% Inputs:
+%   TLE          - Two-Line Element data in a cell array, woth one element
+%                  per line
+%   varargin     - Optional input for time span in ET (in seconds)
+%
+% Outputs:
+%   r_eci        - ECI position vectors (3xN)
+%   v_eci        - ECI velocity vectors (3xN)
+%   initial_epoch - Initial epoch of the TLE data in ET
 
 typerun    = 'u';  % user-provided inputs to SGP4 Matlab function
 opsmode    = 'a';  % afspc approach ('air force space command')
 whichconst =  72;  % WGS72 constants (radius, gravitational parameter)
 
-% convert to rv
-sat.initial_data = twoline2rv(TLE{1}, TLE{2}, typerun,'e', opsmode, whichconst);
+% Convert to rv
+initial_data = twoline2rv(TLE{1}, TLE{2}, typerun, 'e', opsmode, whichconst);
 
 % Get TLE epoch
-[year,mon,day,hr,min,sec] = invjday(sat.initial_data.jdsatepoch, sat.initial_data.jdsatepochf);
-sat.initial_epoch_str = sprintf('%d-%02d-%02dT%02d:%02d:%02.6f', [year,mon,day,hr,min,sec]);
-sat.initial_epoch = cspice_str2et(sat.initial_epoch_str);
+[year, mon, day, hr, min, sec] = invjday(initial_data.jdsatepoch, initial_data.jdsatepochf);
+initial_epoch_str = sprintf('%d-%02d-%02dT%02d:%02d:%02.6f', [year, mon, day, hr, min, sec]);
+initial_epoch = cspice_str2et(initial_epoch_str);
 
-%%%% Compute s/c states during visibility windows
+% Compute s/c states during visibility windows
+if nargin == 1
+    t_span = initial_epoch;
+    t_span_TLE = 0;
+else
+    t_span = varargin{1};
+    t_span_TLE = (t_span - initial_epoch) / 60;  % Convert time span to minutes
+end
 
-sat.time_TLE = (t_span - sat.initial_epoch)./60;
-
-n = length(sat.time_TLE);
-sat.r_teme = zeros(3,n);
-sat.v_teme = zeros(3,n);
-ateme = [0;0;0];
+n = length(t_span_TLE);
+r_teme = zeros(3, n);
+v_teme = zeros(3, n);
+ateme = [0; 0; 0];
 
 % Nutation correction
 % delta-Psi and delta-Epsilon corrections on the observation day, from https://celestrak.org/SpaceData/EOP-All.csv
-dpsi = -0.073296 * pi / (180*3600); %[rad]
-deps = -0.009373 * pi / (180*3600); %[rad]
+dpsi = -0.073296 * pi / (180 * 3600); %[rad]
+deps = -0.009373 * pi / (180 * 3600); %[rad]
 
+r_eci = zeros(3, length(t_span_TLE));
+v_eci = zeros(3, length(t_span_TLE));
 
-for i = 1:length(sat.time_TLE)
-    % Compute states in TEME reference frame 
-[~,sat.r_teme(:,i),sat.v_teme(:,i)] = sgp4(sat.initial_data,sat.time_TLE(i));
+for i = 1:length(t_span_TLE)
 
-% Precession correction: centuries from TDT 2000 January 1 00:00:00.000
-ttt = cspice_unitim(t_span(i), 'ET', 'TDT')/cspice_jyear()/100;
+    % Compute states in TEME reference frame
+    [~, r_teme(:, i), v_teme(:, i)] = sgp4(initial_data, t_span_TLE(i));
 
-% rotation from TEME to ECI
-[sat.r_eci(:,i),sat.v_eci(:,i),~] = teme2eci(sat.r_teme(:,i),sat.v_teme(:,i), ateme, ttt, dpsi,deps);
+    % Precession correction: centuries from TDT 2000 January 1 00:00:00.000
+    ttt = cspice_unitim(t_span(i), 'ET', 'TDT') / cspice_jyear() / 100;
+
+    % Rotation from TEME to ECI
+    [r_eci(:, i), v_eci(:, i), ~] = teme2eci(r_teme(:, i), v_teme(:, i), ateme, ttt, dpsi, deps);
 end
 
-% simulate measurements
-states = [sat.r_eci;sat.v_eci];
-[station.eci,station.eci2topo] = stationCoordinates (station,t_span);
-[~,measure,station] = scLocalCoordinates(station,states,t_span);
-states = states(:,ismember(t_span,measure(:,1)'));
 end
 
-function [x_hat,P,sigma_points] = UKF(sigma_points,settings_ut,measure,weights,station)
+function [states, measure,station] = simulateGSMeasurements(TLE, station)
+% SimulateGSMeasurements - Simulate measurements of a satellite position from
+% a ground station
+%
+% Inputs:
+%   TLE      - Two-Line Element data in a cell array, woth one element per
+%              line
+%   station  - Structure containing ground station information
+%
+% Outputs:
+%   coord    - Satellite coordinates in the topocentric frame (range, 
+%              azimuth, elevation)
+%   measure  - Simulated measurements (range, azimuth, elevation) with
+%              added noise
+
+% Simulate measurements
+[station.eci, station.eci2topo] = stationCoordinates(station.name, station.visibility_time);
+[r_eci, v_eci, ~] = TLE2Cartesian(TLE, station.visibility_time);
+states = [r_eci;v_eci];
+[~, measure,station,vis_flag] = scLocalCoordinates(station, states,station.visibility_time);
+states = states(:,vis_flag);
+end
+
+function [x_hat,P,sigma_points] = UKF(x_hat,P,settings_ut,measure,weights,station)
 
 n = settings_ut.n;
+lambda = settings_ut.lambda;
 
 t0 = measure(1,1);
 tf = measure(2,1);
 
 %%% propagation step
-  
+ mat = sqrtm((n+lambda)*P);
+    sigma_points(:,1,1) = x_hat;
+    for i = 1:n
+        sigma_points(:,i+1,1) = x_hat + mat(:,i);
+        sigma_points(:,i+1+n,1) = x_hat - mat(:,i);
+    end
+
 [sigma_points, P, x_hat] = UT(t0,tf,sigma_points, settings_ut,weights);
 
     %%% correction step
-
     % measurements
     gamma = zeros(3,2*n+1);
     for i = 1:size(gamma,2)
@@ -348,17 +442,14 @@ tf = measure(2,1);
     if cond(Pyy) < 1e4 % perform correction if Pyy is invertible
 
         % kalman gain
-        K = Pxy/(Pyy);
-
+        K = Pxy/Pyy;
         % Correction of the state
         e = [measure(2,2)'-y_hat(1);...
-            180/pi*angdiff(measure(2,3:4)'*pi/180, y_hat(2:3)*pi/180) ];
+            180/pi*angdiff( y_hat(2:3)*pi/180, measure(2,3:4)'*pi/180) ];
         x_hat = x_hat + K*e;
-
         % Propagation of covariance matrix
-        P = P*K*Pyy*K';
+        P = P-K*Pyy*K';
     end
-
 end
 
 function [sigma_points, P, x_hat] = UT(t0,tf,sigma_points, settings_ut,weights)
