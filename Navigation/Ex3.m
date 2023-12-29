@@ -131,22 +131,27 @@ for i=2:len
 end
 
 % Plot
+time_plot = datetime(cspice_timout(Mango.gs_measurements(2:end,1)',...
+    'YYYY-MM-DD HR:MN:SC.###'),'InputFormat','yyyy-MM-dd HH:mm:ss.SSS');
+
 error_r = vecnorm(Mango.states_sgp4(1:3,:)-x_abs(1:3,2:end),2,1);
 figure()
-semilogy(Mango.gs_measurements(2:end,1),error_r)
+semilogy(time_plot,error_r)
 hold on
-semilogy(Mango.gs_measurements(2:end,1),sigma_r)
+semilogy(time_plot,sigma_r)
 grid on
-title('Position')
+xlabel('Time')
+ylabel('Range [km]')
 legend('error','3$\sigma$')
 
 error_v = vecnorm(Mango.states_sgp4(4:6,:)-x_abs(4:6,2:end),2,1);
 figure()
-semilogy(Mango.gs_measurements(2:end,1),error_v)
+semilogy(time_plot,error_v)
 hold on
-semilogy(Mango.gs_measurements(2:end,1),sigma_v)
+semilogy(time_plot,sigma_v)
 grid on
-title('Velocity')
+ylabel('Speed [km/s]')
+xlabel('Time')
 legend('error','3$\sigma$')
 
 %% Ex 2
@@ -203,22 +208,26 @@ for i=2:len
 end
 
 % Plot
+time_plot = datetime(cspice_timout(Tango.sat_measurements(2:end,1)',...
+    'YYYY-MM-DD HR:MN:SC.###'),'InputFormat','yyyy-MM-dd HH:mm:ss.SSS');
 error_r = vecnorm(Tango.states(1:3,:)-x_rel(1:3,2:end),2,1);
 figure()
-semilogy(Tango.sat_measurements(2:end,1),error_r)
+semilogy(time_plot,error_r)
 hold on
-semilogy(Tango.sat_measurements(2:end,1),sigma_r)
+semilogy(time_plot,sigma_r)
 grid on
-title('Position')
+ylabel('Distance [m]')
+xlabel('Time')
 legend('error','3$\sigma$')
 
 error_v = vecnorm(Tango.states(4:6,:)-x_rel(4:6,2:end),2,1);
 figure()
-semilogy(Tango.sat_measurements(2:end,1),error_v)
+semilogy(time_plot,error_v)
 hold on
-semilogy(Tango.sat_measurements(2:end,1),sigma_v)
+semilogy(time_plot,sigma_v)
 grid on
-title('Velocity')
+ylabel('Speed [m/s]')
+xlabel('Time')
 legend('error','3$\sigma$')
 
 %% EX 3
@@ -250,14 +259,21 @@ for i = 2:len
 
     %%% c) Tango absolute covariance
     Tango.P_abs(:,:,i-1) = P_prop(:,:,i-1) + P_rot(:,:,i);
-    Tango.sigma_r(i-1) = 3*sqrt(trace(Tango.P_abs(1:3,1:3,i-1))); %Tango.P_abs(1:3,1:3,i-1)
+    Tango.sigma_r(i-1) = 3*sqrt(trace(Tango.P_abs(1:3,1:3,i-1))); 
     Tango.sigma_v(i-1) = 3*sqrt(trace(Tango.P_abs(4:6,4:6,i-1)));
 end
 
+% Plot
+time_plot = datetime(cspice_timout(time_span(2:end),...
+    'YYYY-MM-DD HR:MN:SC.###'),'InputFormat','yyyy-MM-dd HH:mm:ss.SSS');
 figure()
-plot(Tango.sigma_r)
+plot(time_plot,Tango.sigma_r)
+ylabel('Distance [km]')
+xlabel('Time')
 figure()
-plot(Tango.sigma_v)
+semilogy(time_plot,Tango.sigma_v)
+ylabel('Speed [km/s]')
+xlabel('Time')
 %% functions
 
 function plotStyle
@@ -346,26 +362,40 @@ dxx = dxx';
 end
 
 function [xx] = CW(t,x0,n)
-% COPIATA DA ANDREA, DA CAPIRE
-    PHIrr = [4-3*cos(n*t) 0 0;
-       6*(sin(n*t)-n*t) 1 0;
-       0 0 cos(n*t)];
-PHIvr = [3*n*sin(n*t) 0 0;
-    -6*n*(1-cos(n*t)) 0 0;
-     0 0 -n*sin(n*t)];
-PHIrv = [1/n*sin(n*t) 2/n*(1-cos(n*t)) 0;
-        -2/n*(1-cos(n*t)) 1/n*(4*sin(n*t)-3*n*t) 0 ;
-        0 0 1/n*sin(n*t)];
+% CW - Compute the state of a satellite under Clohessy-Wiltshire equations.
+%
+% Inputs:
+%   t  - time between initial and final state
+%   x0 - Initial state vector [r; v]
+%   n  - Mean motion of the chief satellite
+%
+% Outputs:
+%   xx - State vector [r; v] at time t
 
-PHIvv = [cos(n*t) 2*sin(n*t) 0;
-        -2*sin(n*t) 4*cos(n*t)-3 0;
-        0 0 cos(n*t)];
+% Matrix A components
+A_rr = [   4-3*cos(n*t)    0     0;
+         6*(sin(n*t)-n*t)  1     0;
+                 0         0  cos(n*t) ];
+
+A_vr = [    3*n*sin(n*t)   0       0;
+         -6*n*(1-cos(n*t)) 0       0;
+                  0        0  -n*sin(n*t) ];
+
+A_rv = [   1/n*sin(n*t)     2/n*(1-cos(n*t))       0;
+         -2/n*(1-cos(n*t))  4*sin(n*t)/n-3*t       0 ;
+                 0                    0       1/n*sin(n*t) ];
+
+A_vv = [   cos(n*t)    2*sin(n*t)      0;
+         -2*sin(n*t)  4*cos(n*t)-3     0;
+               0            0       cos(n*t) ];
+
 % Assemble matrix
-A = [PHIrr PHIrv;
-     PHIvr PHIvv];
+A = [ A_rr A_rv;
+      A_vr A_vv ];
 
 % Compute the state
 xx = (A*x0)';
+
 end
 
 function [station_eci, station_eci2topo] = stationCoordinates(station_name, t_span)
@@ -392,53 +422,89 @@ station_eci = cspice_spkezr(station_name, t_span, 'J2000', 'NONE', 'EARTH');
 end
 
 function [sat_coord,varargout] = scLocalCoordinates(station,states,varargin)
+% scLocalCoordinates - Compute topocentric coordinates of a satellite with
+% respect to a ground station.
+%
+% Inputs:
+%   station - Structure containing information about the ground station
+%   states  - Satellite states in ECI coordinates (position and velocity)
+%   varargin - Additional optional arguments (visibility time window)
+%
+% Outputs:
+%   sat_coord - Matrix containing range, azimuth, and elevation
+%   varargout - Optional output (visibility information, measures and
+%               updated station structure)
 
 % Compute station-satellite vector in ECI
 sat_eci = states - station.eci;
-n = size(sat_eci,2);
-sat_topo = zeros(6,n);
+n = size(sat_eci, 2);
+sat_topo = zeros(6, n);
+
 % Convert state into topocentric frame
 for i = 1:n
-   sat_topo(:,i) = station.eci2topo(:,:,i)*sat_eci(:,i);
+    sat_topo(:, i) = station.eci2topo(:, :, i) * sat_eci(:, i);
 end
 
-% Compute range, azimuth and elevation using cspice_xfmsta
-sat_coord = cspice_xfmsta( sat_topo,'RECTANGULAR','LATITUDINAL','EARTH');
-sat_Az = wrapTo360( sat_coord(2,:)*cspice_dpr );
-sat_El = sat_coord(3,:)*cspice_dpr;
-sat_range = sat_coord(1,:);
-sat_coord = [sat_range;sat_Az;sat_El];
-if nargout == 4 
+% Compute range, azimuth, and elevation using cspice_xfmsta
+sat_coord = cspice_xfmsta(sat_topo, 'RECTANGULAR', 'LATITUDINAL', 'EARTH');
+sat_Az = wrapTo360(sat_coord(2, :) * cspice_dpr);
+sat_El = sat_coord(3, :) * cspice_dpr;
+sat_range = sat_coord(1, :);
+sat_coord = [sat_range; sat_Az; sat_El];
+
+% Simulating measurements and handling visibility
+if nargout == 4
+
     if nargin == 3
-    measures = mvnrnd(sat_coord(1:3,:)',station.R);
-    visibility = measures(:,3)>=station.min_el;
-    station.eci_vis = station.eci(:,visibility);
-    station.eci2topo_vis = station.eci2topo(:,:,visibility);
+
+        % Simulate measurements with Gaussian noise
+        measures = mvnrnd(sat_coord(1:3, :)', station.R);
+        visibility = measures(:, 3) >= station.min_el;
+
+        % Update station information based on visibility
+        station.eci_vis = station.eci(:, visibility);
+        station.eci2topo_vis = station.eci2topo(:, :, visibility);
+
     measures = measures(visibility,:);
-    vis_time = varargin{1}(visibility)';
-    varargout{1} = [vis_time, measures];
-    varargout{2} = station;
-    varargout{3} = visibility;
+        vis_time = varargin{1}(visibility)';
+
+        % Output visibility information, measures and updated station structure
+        varargout{1} = [vis_time, measures];
+        varargout{2} = station;
+        varargout{3} = visibility;
+
     else
-        error('Visibility window required to compure measurements')
+        error('Visibility window required to compute measurements');
     end
-end
 
 end
 
-function [sat_coord,varargout] = scRelCoordinates(states,varargin)
+end
+
+function [sat_coord, varargout] = scRelCoordinates(states, varargin)
+% scRelCoordinates - Convert Cartesian coordinates to spherical coordinates.
+%
+% Inputs:
+%   states   - Matrix of Cartesian coordinates (position and velocity)
+%   varargin - Optional input (measurement noise covariance matrix)
+%
+% Outputs:
+%   sat_coord - Matrix containing range, azimuth, and elevation
+%   varargout - Optional output (noisy spherical coordinates)
 
 % Convert from cartesian to spherical coordinates
-sat_coord = cspice_xfmsta( states,'RECTANGULAR','LATITUDINAL','Earth');
-sat_Az = wrapTo360( sat_coord(2,:)*cspice_dpr );
-sat_El = sat_coord(3,:)*cspice_dpr;
-sat_range = sat_coord(1,:);
-sat_coord = [sat_range;sat_Az;sat_El];
+sat_coord = cspice_xfmsta(states, 'RECTANGULAR', 'LATITUDINAL', 'Earth');
+sat_Az = wrapTo360(sat_coord(2, :) * cspice_dpr);
+sat_El = sat_coord(3, :) * cspice_dpr;
+sat_range = sat_coord(1, :);
+sat_coord = [sat_range; sat_Az; sat_El];
 
 % Add noise
 if nargout == 2
     R = varargin{1};
-    varargout{1} = mvnrnd(sat_coord',R);
+
+    % Simulate measurements with Gaussian noise
+    varargout{1} = mvnrnd(sat_coord', R);
 end
 
 end
@@ -504,7 +570,8 @@ v_teme = zeros(3, n);
 ateme = [0; 0; 0];
 
 % Nutation correction
-% delta-Psi and delta-Epsilon corrections on the observation day, from https://celestrak.org/SpaceData/EOP-All.csv
+% delta-Psi and delta-Epsilon corrections on the observation day,
+% from https://celestrak.org/SpaceData/EOP-All.csv
 dpsi = -0.073296 * pi / (180 * 3600); %[rad]
 deps = -0.009373 * pi / (180 * 3600); %[rad]
 
@@ -546,144 +613,232 @@ function [states, measure,station] = simulateGSMeasurements(TLE, station)
 states = [r_eci;v_eci];
 [~, measure,station,vis_flag] = scLocalCoordinates(station, states,station.visibility_time);
 states = states(:,vis_flag);
+
 end
 
-function [states, measures] = simulateFFRFMeasurements(n,t_span,x0,FFRF)
+function [states, measures] = simulateFFRFMeasurements(n, t_span, x0, FFRF)
+% simulateFFRFMeasurements - Simulate relative states and measurements in 
+% the FFRF sensor frame (assumed coincident with the satellite frame).
+%
+% Inputs:
+%   n      - Mean motion of the chief satellite
+%   t_span - Time span
+%   x0     - Initial state vector
+%   FFRF   - Structure containing FFRF-related information
+%
+% Outputs:
+%   states   - Matrix containing simulated states over time
+%   measures - Matrix containing simulated measurements (with noise) and
+%              corresponding timestamps
 
-% Simulate states
-% [~,states] = ode113(@CW,t_span,x0,ode_opt,n);
-% states = states';
-states = zeros(6,length(t_span));
-states(:,1) = x0;
+% Initialize states
+states = zeros(6, length(t_span));
+states(:, 1) = x0;
+
+% Simulate states using Clohessy-Wiltshire equations
 for i = 2:length(t_span)
     tof = t_span(i) - t_span(i-1);
-    [states(:,i)] = CW(tof,states(:,i-1),n); 
+    states(:, i) = CW(tof, states(:, i - 1), n);
 end
 
-[~,measures] = scRelCoordinates(states,FFRF.R);
-measures = [t_span',measures];
-end
-
-function [x_hat,P,sigma_points] = UKF(x_hat,P,settings_ut,measure,weights,station)
-
-t0 = measure(1,1);
-tf = measure(2,1);
-
-[sigma_points,x_hat,P] = UKFPropagate(t0,tf,x_hat,P,settings_ut,weights);
-
-[x_hat, P] = UKFCorrect (x_hat,P,sigma_points,measure,station,weights,settings_ut);
-
-end
-
-function [sigma_points,x_hat,P] = UKFPropagate(t0,tf,x_hat,P,settings_ut,weights)
-
-n = settings_ut.n;
-ode_opt = settings_ut.ode_opt;
-
-lambda = settings_ut.lambda;
-
-% Compute sigma points at t_(k-1)
-mat = sqrtm((n+lambda)*P);
-sigma_points(:,1,1) = x_hat;
-for i = 1:n
-    sigma_points(:,i+1,1) = x_hat + mat(:,i);
-    sigma_points(:,i+1+n,1) = x_hat - mat(:,i);
-end
-
-% Propagate sigma points to t_k
-if t0<tf
-    for i = 1:2*n+1
-        switch settings_ut.fun
-            case 'Absolute'
-                mu = settings_ut.mu;
-                J2 = settings_ut.J2;
-                Re = settings_ut.Re;
-                [~,x] = ode113(@PTBP,[t0,tf],sigma_points(:,i),ode_opt,mu,J2,Re);
-
-            case 'Relative'
-                mean_motion = settings_ut.mean_motion;
-                x = CW(tf-t0,sigma_points(:,i),mean_motion);
-        end
-        sigma_points(:,i) = x(end,:)';
-    end
-    % Compute state vector
-    x_hat = zeros(6,1);
-    for i = 1:size(sigma_points,2)
-        x_hat = x_hat + weights.mean(i)*sigma_points(:,i);
-    end
-    % Compute Covariance matrix
-    P = zeros(6,6);
-    for i = 1:size(sigma_points,2)
-        P = P + weights.cov(i) * (sigma_points(:,i) -x_hat) * (sigma_points(:,i) -x_hat)';
-    end
-end
+% Simulate measurements in the FFRF frame
+[~, measures] = scRelCoordinates(states, FFRF.R);
+measures = [t_span', measures];
 
 end
 
 function R = eci2Lvlh(n,s)
+% eci2Lvlh - Compute the transformation matrix from ECI to LVLH frame.
+%
+% Inputs:
+%   n - Orbiting body's mean motion [rad/s]
+%   s - State vector in ECI frame [position; velocity]
+%
+% Output:
+%   R - Transformation matrix from ECI to LVLH frame
 
+% Extract position and velocity vectors from the state
 r_eci = s(1:3);
 v_eci = s(4:6);
 
-i_v = r_eci/norm(r_eci);
-k_v = cross(r_eci,v_eci)/norm(cross(r_eci,v_eci));
-j_v = cross(k_v,i_v);
+% Calculate the unit vectors in the LVLH frame
+i_v = r_eci / norm(r_eci);
+k_v = cross(r_eci, v_eci) / norm(cross(r_eci, v_eci));
+j_v = cross(k_v, i_v);
 
-S = [ 0  n  0;
-     -n  0  0;
-      0  0  0;];
+% Construct the Ssew-symmetric matrix
+S = [0  n  0;
+    -n  0  0;
+     0  0  0];
 
-R = [   [i_v';j_v';k_v']         zeros(3);
-       S*[i_v';j_v';k_v']    [i_v';j_v';k_v'] ];
+% Assemble the transformation matrix from ECI to LVLH
+R = [ [i_v'; j_v'; k_v']             zeros(3);
+      S * [i_v'; j_v'; k_v']    [i_v'; j_v'; k_v'] ];
+
 end
 
-function [x_hat, P] = UKFCorrect (x_hat,P,sigma_points,measure,station,weights,settings_ut)
+function [x_hat, P, sigma_points] = UKF(x_hat, P, settings_ut, measure, weights, station)
+% UKF - Unscented Kalman Filter for state estimation. This function serves
+%       as a wrapper for the UKF process, including the prediction
+%       (propagation) step (UKFPropagate) and the correction step
+%       (UKFCorrect).
+%
+% Inputs:
+%   x_hat - State estimate at the previous time step
+%   P - Covariance matrix of the state estimate at the previous time step
+%   settings_ut - Settings for the Unscented Transform (UT)
+%   measure - Measurement data at the current time step
+%   weights - Weights used in the UKF calculations
+%   station - Information about the tracking station
+%
+% Outputs:
+%   x_hat - Updated state estimate
+%   P - Updated covariance matrix of the state estimate
+%   sigma_points - Sigma points used in the filtering process
 
-n = settings_ut.n;
+% Extract the initial and final time from the measurement data
+t0 = measure(1, 1);
+tf = measure(2, 1);
 
-% Simulate measurements
-gamma = zeros(3,2*n+1);
-for i = 1:size(gamma,2)
-    switch settings_ut.fun
-        case 'Absolute'
-            gamma(:,i) = scLocalCoordinates(station,sigma_points(:,i));
-        case 'Relative'
-            gamma(:,i) = scRelCoordinates(sigma_points(:,i));
+% Propagate sigma points through the process model
+[sigma_points, x_hat, P] = UKFPropagate(t0, tf, x_hat, P, settings_ut, weights);
+
+% Correct the state estimate and covariance using the measurement
+[x_hat, P] = UKFCorrect(x_hat, P, sigma_points, measure, station, weights, settings_ut);
+
+end
+
+function [sigma_points, x_hat, P] = UKFPropagate(t0, tf, x_hat, P, settings_ut, weights)
+% UKFPropagate - Propagate sigma points and covariance matrix with 
+%                Unscented Transform.
+%
+% Inputs:
+%   t0 - Initial time
+%   tf - Final time
+%   x_hat - State estimate at the previous time step
+%   P - Covariance matrix of the state estimate at the previous time step
+%   settings_ut - Settings for the Unscented Transform 
+%   weights - Weights used in the UKF calculations
+%
+% Outputs:
+%   sigma_points - Propagated sigma points
+%   x_hat - Updated state estimate after propagation
+%   P - Updated covariance matrix of the state estimate after propagation
+
+n = settings_ut.n; % Dimension of the state vector
+ode_opt = settings_ut.ode_opt; % ODE solver options
+
+lambda = settings_ut.lambda; % Scaling factor
+
+% Compute sigma points at t_(k-1)
+mat = sqrtm((n + lambda) * P);
+sigma_points(:, 1, 1) = x_hat;
+for i = 1:n
+    sigma_points(:, i + 1, 1) = x_hat + mat(:, i);
+    sigma_points(:, i + 1 + n, 1) = x_hat - mat(:, i);
+end
+
+% Propagate sigma points to t_k
+if t0 < tf
+    for i = 1:(2 * n + 1)
+        switch settings_ut.fun
+
+            % Compute absolute state using the perturbed two body problem
+            case 'Absolute'            
+                mu = settings_ut.mu;
+                J2 = settings_ut.J2;
+                Re = settings_ut.Re;
+                [~, x] = ode113(@PTBP, [t0, tf], sigma_points(:, i), ode_opt, mu, J2, Re);
+
+            % Compute relative state using the Clohessy-Wiltshire equations
+            case 'Relative'
+                mean_motion = settings_ut.mean_motion;
+                x = CW(tf - t0, sigma_points(:, i), mean_motion);
+        end
+        sigma_points(:, i) = x(end, :)';
+    end
+
+    % Compute state vector
+    x_hat = zeros(6, 1);
+    for i = 1:size(sigma_points, 2)
+        x_hat = x_hat + weights.mean(i) * sigma_points(:, i);
+    end
+
+    % Compute Covariance matrix
+    P = zeros(6, 6);
+    for i = 1:size(sigma_points, 2)
+        P = P + weights.cov(i) * (sigma_points(:, i) - x_hat) * (sigma_points(:, i) - x_hat)';
     end
 end
 
-y_hat = zeros(3,1);
-for i = 1:size(gamma,2)
-    y_hat = y_hat + weights.mean(i)*gamma(:,i);
 end
 
-% covariance matrices
+function [x_hat, P] = UKFCorrect(x_hat, P, sigma_points, measure, station, weights, settings_ut)
+% UKFCorrect - Correct the state estimate based on measurements.
+%
+% Inputs:
+%   x_hat - State estimate after propagation
+%   P - Covariance matrix of the state estimate after propagation
+%   sigma_points - Propagated sigma points
+%   measure - Measurement vector
+%   station - Tracking station information
+%   weights - Weights used in the UKF calculations
+%   settings_ut - Settings for the Unscented Transform
+%
+% Outputs:
+%   x_hat - Corrected state estimate
+%   P - Updated covariance matrix of the state estimate
+
+n = settings_ut.n; % Dimension of the state vector
+
+% Simulate measurements using propagated sigma points
+gamma = zeros(3, 2 * n + 1);
+for i = 1:size(gamma, 2)
+
+    switch settings_ut.fun
+        case 'Absolute'
+            gamma(:, i) = scLocalCoordinates(station, sigma_points(:, i));
+        case 'Relative'
+            gamma(:, i) = scRelCoordinates(sigma_points(:, i));
+    end
+
+end
+
+% Compute the predicted measurement
+y_hat = zeros(3, 1);
+for i = 1:size(gamma, 2)
+    y_hat = y_hat + weights.mean(i) * gamma(:, i);
+end
+
+% Covariance matrices
+
 Pyy = station.R;
-meas_diff = zeros(3,size(gamma,2));
-for i = 1:size(gamma,2)
-    meas_diff(:,i) = [gamma(1,i)'-y_hat(1);...
-        180/pi*angdiff( y_hat(2:3)*pi/180, gamma(2:3,i)*pi/180) ];
-    Pyy = Pyy + weights.cov(i) * meas_diff(:,i) * meas_diff(:,i)';
+meas_diff = zeros(3, size(gamma, 2));
+for i = 1:size(gamma, 2)
+    meas_diff(:, i) = [gamma(1, i)' - y_hat(1); ...
+        180/pi * angdiff(y_hat(2:3) * pi/180, gamma(2:3, i) * pi/180)];
+    Pyy = Pyy + weights.cov(i) * meas_diff(:, i) * meas_diff(:, i)';
 end
 
-Pxy = zeros(6,3);
-for i = 1:size(gamma,2)
-    Pxy = Pxy +  weights.cov(i) * (sigma_points(:,i) -x_hat) * meas_diff(:,i)';
+Pxy = zeros(6, 3);
+for i = 1:size(gamma, 2)
+    Pxy = Pxy + weights.cov(i) * (sigma_points(:, i) - x_hat) * meas_diff(:, i)';
 end
 
 % Perform correction if Pyy is invertible
 if cond(Pyy) < 1e10
 
-    % kalman gain
-    K = Pxy/Pyy;
+    % Kalman gain
+    K = Pxy / Pyy;
 
     % Correction of the state
-    e = [measure(2,2)'-y_hat(1);...
-        180/pi*angdiff( y_hat(2:3)*pi/180, measure(2,3:4)'*pi/180) ];
-    x_hat = x_hat + K*e;
+    e = [measure(2, 2)' - y_hat(1); ...
+        180/pi * angdiff(y_hat(2:3) * pi/180, measure(2, 3:4)' * pi/180)];
+    x_hat = x_hat + K * e;
 
     % Propagation of covariance matrix
-    P = P-K*Pyy*K';
+    P = P - K * Pyy * K';
 end
+
 end
 

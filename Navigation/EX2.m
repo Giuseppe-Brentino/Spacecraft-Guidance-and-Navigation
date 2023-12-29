@@ -72,35 +72,44 @@ Svalbard.Mango_coord = scLocalCoordinates(Svalbard, states);
 [Svalbard.visibility_time, Svalbard.Mango_visible_coord] = visibility(Svalbard.Mango_coord, Svalbard.min_el, t_span);
 
 % Plot visibility coordinates
+dates = datetime(cspice_timout(t_span,'YYYY-MM-DD HR:MN:SC.###'),...
+    'InputFormat','yyyy-MM-dd HH:mm:ss.SSS');
+
 figure()
 % Kourou
 subplot(2,2,1)
 title('Kourou')
 hold on
 grid on
-plot(t_span,Kourou.Mango_coord(2,:),'DisplayName','Not visible');
+plot(dates,Kourou.Mango_coord(2,:),'DisplayName','Not visible');
 
 vis_time = Kourou.visibility_time;
+K_vis_time_plot = datetime(cspice_timout(vis_time,'YYYY-MM-DD HR:MN:SC.###'),...
+    'InputFormat','yyyy-MM-dd HH:mm:ss.SSS');
+
 Az_plot = Kourou.Mango_visible_coord(2,:);
 El_plot = Kourou.Mango_visible_coord(3,:);
 for i = 2:length(vis_time)
     if vis_time(i) - vis_time(i-1) >= 2*dt
+        K_vis_time_plot =[K_vis_time_plot(1:i-1); K_vis_time_plot(i-1);  K_vis_time_plot(i:end)];
         vis_time =[vis_time(1:i-1) nan vis_time(i:end)];
         Az_plot = [Az_plot(1:i-1) nan Az_plot(i:end)];
         El_plot = [ El_plot(1:i-1) nan  El_plot(i:end)];
     end
 end
-plot(vis_time,Az_plot,'DisplayName','Visible');
+
+
+plot(K_vis_time_plot,Az_plot,'DisplayName','Visible');
 ylabel('Azimuth [deg]')
-xlabel('Epoch [s]')
+xlabel('Date')
 legend
 subplot(2,2,3)
 hold on
 grid on
-plot(t_span,Kourou.Mango_coord(3,:),'DisplayName','Not visible');
-plot(vis_time,El_plot,'DisplayName','Visible');
+plot(dates,Kourou.Mango_coord(3,:),'DisplayName','Not visible');
+plot(K_vis_time_plot,El_plot,'DisplayName','Visible');
 ylabel('Elevation [deg]')
-xlabel('Epoch [s]')
+xlabel('Date')
 legend;
 
 %Svalbard
@@ -108,30 +117,34 @@ subplot(2,2,2)
 title('Svalbard')
 hold on
 grid on
-plot(t_span,Svalbard.Mango_coord(2,:),'DisplayName','Not visible');
+plot(dates,Svalbard.Mango_coord(2,:),'DisplayName','Not visible');
 
 vis_time = Svalbard.visibility_time;
+S_vis_time_plot = datetime(cspice_timout(vis_time,'YYYY-MM-DD HR:MN:SC.###'),...
+    'InputFormat','yyyy-MM-dd HH:mm:ss.SSS');
+
 Az_plot = Svalbard.Mango_visible_coord(2,:);
 El_plot = Svalbard.Mango_visible_coord(3,:);
 for i = 2:length(vis_time)
     if vis_time(i) - vis_time(i-1) >= 2*dt
+        S_vis_time_plot =[S_vis_time_plot(1:i-1); S_vis_time_plot(1); S_vis_time_plot(i:end)];
         vis_time =[vis_time(1:i-1) nan vis_time(i:end)];
         Az_plot = [Az_plot(1:i-1) nan Az_plot(i:end)];
         El_plot = [El_plot(1:i-1) nan  El_plot(i:end)];
     end
 end
 
-plot(vis_time,Az_plot,'DisplayName','Visible');
+plot(S_vis_time_plot,Az_plot,'DisplayName','Visible');
 ylabel('Azimuth [deg]')
-xlabel('Epoch [s]')
+xlabel('Date')
 legend
 subplot(2,2,4)
 hold on
 grid on
-plot(t_span,Svalbard.Mango_coord(3,:),'DisplayName','Not visible');
-plot(vis_time,El_plot,'DisplayName','Visible');
+plot(dates,Svalbard.Mango_coord(3,:),'DisplayName','Not visible');
+plot(S_vis_time_plot,El_plot,'DisplayName','Visible');
 ylabel('Elevation [deg]')
-xlabel('Epoch [s]')
+xlabel('Date')
 legend;
 
 %% Ex 2
