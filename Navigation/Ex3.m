@@ -166,7 +166,7 @@ relative_s0 = R_eci2LVLH_0*(Tango.s0_eci - Mango.s0_eci); % [km],[km/s]
 
 %%% b) Simulate measurements
 [Tango.states_window, Tango.sat_measurements_window] = simulateFFRFMeasurements...
-    (ode_opt,Mango.mean_motion,t_span,relative_s0,FFRF);
+    (Mango.mean_motion,t_span,relative_s0,FFRF);
 
 %%% c) Estimate states via UKF
 
@@ -284,7 +284,6 @@ set(0, 'defaultLegendFontSize',12);
 set(0,'defaultAxesFontSize',16);
 end
 
-
 function [dxx] = TBP(~,xx,mu)
 % TBP - Computes the equations of motion for the Two-Body Problem (TBP)
 %       and optionally the state transition matrix (STM) derivative.
@@ -312,7 +311,6 @@ dxx(4:6) = -mu/r_norm^3 * [x;y;z];
 dxx = dxx';
     
 end
-
 
 function [dxx] = PTBP(t,xx,mu,J2,Re)
 % PTBP - Perturbed Two-Body Problem equations of motion with J2 perturbation
@@ -347,24 +345,7 @@ dxx = dxx';
 
 end
 
-
-function [dxx] = CW(~,xx,n)
-
-x  = xx(1);
-z  = xx(3);
-vx = xx(4);
-vy = xx(5);
-
-
-dxx(1:3) = xx(4:6);
-dxx(4) = 3*n^2*x +2*n*vy;
-dxx(5) = -2*n*vx;
-dxx(6) = -n^2*z;
-
-dxx = dxx';
-end
-
-function [xx] = CW_analytic(t,x0,n)
+function [xx] = CW(t,x0,n)
 % COPIATA DA ANDREA, DA CAPIRE
     PHIrr = [4-3*cos(n*t) 0 0;
        6*(sin(n*t)-n*t) 1 0;
@@ -567,17 +548,17 @@ states = [r_eci;v_eci];
 states = states(:,vis_flag);
 end
 
-function [states, measures] = simulateFFRFMeasurements(ode_opt,n,t_span,x0,FFRF)
+function [states, measures] = simulateFFRFMeasurements(n,t_span,x0,FFRF)
 
 % Simulate states
-[~,states] = ode113(@CW,t_span,x0,ode_opt,n);
-states = states';
-% states = zeros(6,length(t_span));
-% states(:,1) = x0;
-% for i = 2:length(t_span)
-%     tof = t_span(i) - t_span(i-1);
-%     [states(:,i)] = CW_analytic(tof,states(:,i-1),n); 
-% end
+% [~,states] = ode113(@CW,t_span,x0,ode_opt,n);
+% states = states';
+states = zeros(6,length(t_span));
+states(:,1) = x0;
+for i = 2:length(t_span)
+    tof = t_span(i) - t_span(i-1);
+    [states(:,i)] = CW(tof,states(:,i-1),n); 
+end
 
 [~,measures] = scRelCoordinates(states,FFRF.R);
 measures = [t_span',measures];
@@ -621,15 +602,10 @@ if t0<tf
 
             case 'Relative'
                 mean_motion = settings_ut.mean_motion;
-                [~,x] = ode113(@CW,[t0,tf],sigma_points(:,i),ode_opt,mean_motion);
-                x = x(end,:);
-                % x = CW_analytic(tf-t0,sigma_points(:,i),mean_motion);
-                x = x';
+                x = CW(tf-t0,sigma_points(:,i),mean_motion);
         end
         sigma_points(:,i) = x(end,:)';
-      
     end
-    
     % Compute state vector
     x_hat = zeros(6,1);
     for i = 1:size(sigma_points,2)
