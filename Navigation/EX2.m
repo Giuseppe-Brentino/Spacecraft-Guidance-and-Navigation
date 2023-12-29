@@ -187,7 +187,7 @@ P_ls_J2 = resnorm_J2/(length(residual_J2)-length(x0_J2))...
 
 % Initial TLE
 TLE = cell(2,1);   
-TLE{1} = '1 36827U 10028F   10224.22753605  .00278492  00000-0  52287-1 0  9996';
+TLE{1} = '1 36827U 10028F   10224.22753605  .00278492  00000-0  82287-1 0  9996';
 TLE{2} = '2 36827 098.2797 049.5751 0044602 022.4408 337.8871 14.40890217    55';
 
 [Kourou.Tango_coord_TLE,Kourou.Tango_measured_coord] = simulateMeasurements(TLE,Kourou);

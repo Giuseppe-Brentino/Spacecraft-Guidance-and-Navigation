@@ -14,43 +14,49 @@ cspice_furnsh('assignment02.tm')
 plotStyle;
 
 %% Data
+t0 = cspice_str2et('2010-08-12T05:30:00.000');
+tf = cspice_str2et('2010-08-12T06:30:00.000');
+t_sep = cspice_str2et('August 12 05:27:39.114 UTC 2010');
 
 Mango.TLE = cell(2,1);   
 Mango.TLE{1} = '1 36599U 10028B   10224.22752732 -.00000576  00000-0 -16475-3 0  9998';
 Mango.TLE{2} = '2 36599 098.2803 049.5758 0043871 021.7908 338.5082 14.40871350  8293';
 Mango.rsep  = [4622.232026629; 5399.3369588058; -0.0212138165769957];
 Mango.vsep  = [0.812221125483763; -0.721512914578826; 7.42665302729053];
-
 Mango.s_sep = [Mango.rsep; Mango.vsep];
 
+Tango.TLE = cell(2,1);   
+Tango.TLE{1} = '1 36827U 10028F   10224.22753605  .00278492  00000-0  82287-1 0  9996';
+Tango.TLE{2} = '2 36827 098.2797 049.5751 0044602 022.4408 337.8871 14.40890217    55';
+Tango.rsep  = [4621.69343340281; 5399.26386352847; -3.09039248714313];
+Tango.vsep  = [0.813960847513811; -0.719449862738607; 7.42706066911294];
+Tango.s_sep = [Tango.rsep; Tango.vsep];
+
 P_sep = [ +5.6e-7, +3.5e-7, -7.1e-8,    0,        0,        0;
-       +3.5e-7, +9.7e-7, +7.6e-8,    0,        0,        0;
-       -7.1e-8, +7.6e-8, +8.1e-8,    0,        0,        0;
-           0,       0,       0,  +2.8e-11,     0,        0;
-           0,       0,       0,      0,    +2.7e-11,     0;
-           0,       0,       0,      0,        0,    +9.6e-12 ];
+          +3.5e-7, +9.7e-7, +7.6e-8,    0,        0,        0;
+          -7.1e-8, +7.6e-8, +8.1e-8,    0,        0,        0;
+              0,       0,       0,  +2.8e-11,     0,        0;
+              0,       0,       0,      0,    +2.7e-11,     0;
+              0,       0,       0,      0,        0,    +9.6e-12 ];
 
 Svalbard.name = 'SVALBARD';
 Svalbard.lat = 78.229772;
 Svalbard.lon = 15.407786;
 Svalbard.alt = 458;
 Svalbard.R = diag([0.01^2;0.125^2;0.125^2]); % km deg deg
-
 Svalbard.min_el = 5;
+
+FFRF.R = diag([(1e-5)^2;1;1]); % km deg deg
 
 %% Ex 1
 
-t0 = cspice_str2et('2010-08-12T05:30:00.000');
-tf = cspice_str2et('2010-08-12T06:30:00.000');
-t_sep = cspice_str2et('August 12 05:27:39.114 UTC 2010');
-
-ode_opt = odeset('RelTol',1e-12,'AbsTol',[ones(3,1)*1e-9; ones(3,1)*1e-12]);
+ode_opt = odeset('RelTol',1e-13,'AbsTol',1e-13);
 mu = cspice_bodvrd('Earth','GM',1);
 J2 = 0.0010826269;
 Re = cspice_bodvrd('Earth','RADII',3);
 Re = Re(1);
 
-%%% a)
+%%% a) Compute visibility window
 
 % propagate orbit
 t_span = t0:5:tf;
@@ -82,7 +88,7 @@ settings_ut.J2 = J2;
 settings_ut.Re = Re;
 settings_ut.ode_opt = ode_opt;
 settings_ut.lambda = lambda;
-
+settings_ut.fun = 'Absolute';
 n = settings_ut.n;
 
 % Define weights
@@ -100,21 +106,13 @@ Mango.gs_measurements = [[t0,0,0,0]; Mango.gs_measurements];
 len = length(Mango.gs_measurements);
 
 % initialize variables
-P = zeros(6,6,len);
-x = zeros(6,len);
+P_abs = zeros(6,6,len);
+x_abs = zeros(6,len);
 sigma_points = zeros(6,13,len);
 
 % compute initial values
 P_sep = 1e4*P_sep;
-mat = sqrtm((n+lambda)*P_sep);
-    sigma_points(:,1,1) = Mango.s_sep;
-    for i = 1:n
-        sigma_points(:,i+1,1) = Mango.s_sep + mat(:,i);
-        sigma_points(:,i+1+n,1) = Mango.s_sep - mat(:,i);
-    end
-
-% propagate from separation time to t0
-[sigma_points(:,:,1), P(:,:,1), x(:,1)] = UT(t_sep,t0,sigma_points(:,:,1),...
+[sigma_points(:,:,1),x_abs(:,1),P_abs(:,:,1)] = UKFPropagate(t_sep,t0,Mango.s_sep,P_sep,...
     settings_ut,weights);
 
 % initialize performance parameters
@@ -125,15 +123,15 @@ sigma_v = zeros(len-1,1);
 for i=2:len
     Svalbard.eci = Svalbard.eci_vis(:,i-1);
     Svalbard.eci2topo = Svalbard.eci2topo_vis(:,:,i-1);
-    [x(:,i),P(:,:,i),sigma_points(:,:,i)] =UKF(x(:,i-1),P(:,:,i-1),...
+    [x_abs(:,i),P_abs(:,:,i),sigma_points(:,:,i)] =UKF(x_abs(:,i-1),P_abs(:,:,i-1),...
         settings_ut,Mango.gs_measurements(i-1:i,:),weights,Svalbard);
 
-    sigma_r(i-1) = 3*sqrt(trace(P(1:3,1:3,i)));
-    sigma_v(i-1) = 3*sqrt(trace(P(4:6,4:6,i)));
+    sigma_r(i-1) = 3*sqrt(trace(P_abs(1:3,1:3,i)));
+    sigma_v(i-1) = 3*sqrt(trace(P_abs(4:6,4:6,i)));
 end
 
 % Plot
-error_r = vecnorm(Mango.states_sgp4(1:3,:)-x(1:3,2:end),2,1);
+error_r = vecnorm(Mango.states_sgp4(1:3,:)-x_abs(1:3,2:end),2,1);
 figure()
 semilogy(Mango.gs_measurements(2:end,1),error_r)
 hold on
@@ -142,7 +140,7 @@ grid on
 title('Position')
 legend('error','3$\sigma$')
 
-error_v = vecnorm(Mango.states_sgp4(4:6,:)-x(4:6,2:end),2,1);
+error_v = vecnorm(Mango.states_sgp4(4:6,:)-x_abs(4:6,2:end),2,1);
 figure()
 semilogy(Mango.gs_measurements(2:end,1),error_v)
 hold on
@@ -150,6 +148,116 @@ semilogy(Mango.gs_measurements(2:end,1),sigma_v)
 grid on
 title('Velocity')
 legend('error','3$\sigma$')
+
+%% Ex 2
+
+%%% a) Compute Tango relative states in LVLH frame
+
+[r_eci, v_eci,~] = TLE2Cartesian(Mango.TLE, t0);
+Mango.s0_eci = [r_eci;v_eci];
+Mango.mean_motion = sqrt(mu/norm(r_eci)^3);
+R_eci2LVLH_0 = eci2Lvlh(Mango.mean_motion,Mango.s0_eci);
+
+
+[r_eci, v_eci, ~] = TLE2Cartesian(Tango.TLE, t0);
+Tango.s0_eci = [r_eci;v_eci];
+
+relative_s0 = R_eci2LVLH_0*(Tango.s0_eci - Mango.s0_eci); % [km],[km/s]
+
+%%% b) Simulate measurements
+[Tango.states_window, Tango.sat_measurements_window] = simulateFFRFMeasurements...
+    (ode_opt,Mango.mean_motion,t_span,relative_s0,FFRF);
+
+%%% c) Estimate states via UKF
+
+t1 = Mango.gs_measurements(end,1)+5;
+t2 = t1+20*60;
+t_span = t1:5:t2;
+index_i = find(t1==Tango.sat_measurements_window(:,1),1,"first");
+index_f = find(t2==Tango.sat_measurements_window(:,1),1,"first");
+
+Tango.states = Tango.states_window(:,index_i:index_f);
+Tango.sat_measurements = Tango.sat_measurements_window(index_i:index_f,:);
+
+settings_ut.fun = 'Relative';
+settings_ut.mean_motion = Mango.mean_motion;
+
+Tango.sat_measurements = [[t_span(1),0,0,0];Tango.sat_measurements];
+len = size(Tango.sat_measurements,1);
+
+P_rel = zeros(6,6,len);
+x_rel = zeros(6,len);
+sigma_points_rel = zeros(6,13,len);
+sigma_r = zeros(len-1,1);
+sigma_v = zeros(len-1,1);
+
+P_rel(:,:,1) = diag([0.01, 0.01, 0.1, 0.0001, 0.0001, 0.001]);
+x_rel(:,1) = Tango.states(:,1);
+
+for i=2:len
+    [x_rel(:,i),P_rel(:,:,i),sigma_points_rel(:,:,i)] =UKF(x_rel(:,i-1),P_rel(:,:,i-1),...
+        settings_ut,Tango.sat_measurements(i-1:i,:),weights,FFRF);
+
+    sigma_r(i-1) = 3*sqrt(trace(P_rel(1:3,1:3,i)));
+    sigma_v(i-1) = 3*sqrt(trace(P_rel(4:6,4:6,i)));
+end
+
+% Plot
+error_r = vecnorm(Tango.states(1:3,:)-x_rel(1:3,2:end),2,1);
+figure()
+semilogy(Tango.sat_measurements(2:end,1),error_r)
+hold on
+semilogy(Tango.sat_measurements(2:end,1),sigma_r)
+grid on
+title('Position')
+legend('error','3$\sigma$')
+
+error_v = vecnorm(Tango.states(4:6,:)-x_rel(4:6,2:end),2,1);
+figure()
+semilogy(Tango.sat_measurements(2:end,1),error_v)
+hold on
+semilogy(Tango.sat_measurements(2:end,1),sigma_v)
+grid on
+title('Velocity')
+legend('error','3$\sigma$')
+
+%% EX 3
+
+
+time_span = [t_span(1)-5, t_span];
+len = length(time_span);
+P_prop = zeros(6,6,len);
+P_prop(:,:,1) = P_abs(:,:,end);
+
+s_prop = zeros(6,len);
+s_prop(:,1) = x_abs(:,1);
+
+P_rot = zeros(6,6,len-1);
+Tango.P_abs = zeros(6,6,len-1);
+Tango.sigma_r = zeros(len-1,1);
+Tango.sigma_v = zeros(len-1,1);
+
+settings_ut.fun = 'Absolute';
+
+for i = 2:len
+    %%% a) Propagate Mango covariance
+    [~,s_prop(:,i),P_prop(:,:,i)] = UKFPropagate(time_span(i-1),...
+        time_span(i),s_prop(:,i-1),P_prop(:,:,i-1),settings_ut,weights);
+
+    %%% b) Rotate Covariance in LVLH frame
+    R = eci2Lvlh(Mango.mean_motion,s_prop(:,i));
+    P_rot(:,:,i) = R'*P_rel(:,:,i)*R;
+
+    %%% c) Tango absolute covariance
+    Tango.P_abs(:,:,i-1) = P_prop(:,:,i-1) + P_rot(:,:,i);
+    Tango.sigma_r(i-1) = 3*sqrt(trace(Tango.P_abs(1:3,1:3,i-1))); %Tango.P_abs(1:3,1:3,i-1)
+    Tango.sigma_v(i-1) = 3*sqrt(trace(Tango.P_abs(4:6,4:6,i-1)));
+end
+
+figure()
+plot(Tango.sigma_r)
+figure()
+plot(Tango.sigma_v)
 %% functions
 
 function plotStyle
@@ -175,6 +283,7 @@ set(0, 'defaultLegendFontSize',12);
 % axes:
 set(0,'defaultAxesFontSize',16);
 end
+
 
 function [dxx] = TBP(~,xx,mu)
 % TBP - Computes the equations of motion for the Two-Body Problem (TBP)
@@ -203,6 +312,7 @@ dxx(4:6) = -mu/r_norm^3 * [x;y;z];
 dxx = dxx';
     
 end
+
 
 function [dxx] = PTBP(t,xx,mu,J2,Re)
 % PTBP - Perturbed Two-Body Problem equations of motion with J2 perturbation
@@ -235,6 +345,46 @@ dxx(4:6) = -mu / r_norm^3 * [x; y; z] + a_j2;
 
 dxx = dxx';
 
+end
+
+
+function [dxx] = CW(~,xx,n)
+
+x  = xx(1);
+z  = xx(3);
+vx = xx(4);
+vy = xx(5);
+
+
+dxx(1:3) = xx(4:6);
+dxx(4) = 3*n^2*x +2*n*vy;
+dxx(5) = -2*n*vx;
+dxx(6) = -n^2*z;
+
+dxx = dxx';
+end
+
+function [xx] = CW_analytic(t,x0,n)
+% COPIATA DA ANDREA, DA CAPIRE
+    PHIrr = [4-3*cos(n*t) 0 0;
+       6*(sin(n*t)-n*t) 1 0;
+       0 0 cos(n*t)];
+PHIvr = [3*n*sin(n*t) 0 0;
+    -6*n*(1-cos(n*t)) 0 0;
+     0 0 -n*sin(n*t)];
+PHIrv = [1/n*sin(n*t) 2/n*(1-cos(n*t)) 0;
+        -2/n*(1-cos(n*t)) 1/n*(4*sin(n*t)-3*n*t) 0 ;
+        0 0 1/n*sin(n*t)];
+
+PHIvv = [cos(n*t) 2*sin(n*t) 0;
+        -2*sin(n*t) 4*cos(n*t)-3 0;
+        0 0 cos(n*t)];
+% Assemble matrix
+A = [PHIrr PHIrv;
+     PHIvr PHIvv];
+
+% Compute the state
+xx = (A*x0)';
 end
 
 function [station_eci, station_eci2topo] = stationCoordinates(station_name, t_span)
@@ -291,6 +441,23 @@ if nargout == 4
     else
         error('Visibility window required to compure measurements')
     end
+end
+
+end
+
+function [sat_coord,varargout] = scRelCoordinates(states,varargin)
+
+% Convert from cartesian to spherical coordinates
+sat_coord = cspice_xfmsta( states,'RECTANGULAR','LATITUDINAL','Earth');
+sat_Az = wrapTo360( sat_coord(2,:)*cspice_dpr );
+sat_El = sat_coord(3,:)*cspice_dpr;
+sat_range = sat_coord(1,:);
+sat_coord = [sat_range;sat_Az;sat_El];
+
+% Add noise
+if nargout == 2
+    R = varargin{1};
+    varargout{1} = mvnrnd(sat_coord',R);
 end
 
 end
@@ -400,81 +567,147 @@ states = [r_eci;v_eci];
 states = states(:,vis_flag);
 end
 
-function [x_hat,P,sigma_points] = UKF(x_hat,P,settings_ut,measure,weights,station)
+function [states, measures] = simulateFFRFMeasurements(ode_opt,n,t_span,x0,FFRF)
 
-n = settings_ut.n;
-lambda = settings_ut.lambda;
+% Simulate states
+[~,states] = ode113(@CW,t_span,x0,ode_opt,n);
+states = states';
+% states = zeros(6,length(t_span));
+% states(:,1) = x0;
+% for i = 2:length(t_span)
+%     tof = t_span(i) - t_span(i-1);
+%     [states(:,i)] = CW_analytic(tof,states(:,i-1),n); 
+% end
+
+[~,measures] = scRelCoordinates(states,FFRF.R);
+measures = [t_span',measures];
+end
+
+function [x_hat,P,sigma_points] = UKF(x_hat,P,settings_ut,measure,weights,station)
 
 t0 = measure(1,1);
 tf = measure(2,1);
 
-%%% propagation step
- mat = sqrtm((n+lambda)*P);
-    sigma_points(:,1,1) = x_hat;
-    for i = 1:n
-        sigma_points(:,i+1,1) = x_hat + mat(:,i);
-        sigma_points(:,i+1+n,1) = x_hat - mat(:,i);
-    end
+[sigma_points,x_hat,P] = UKFPropagate(t0,tf,x_hat,P,settings_ut,weights);
 
-[sigma_points, P, x_hat] = UT(t0,tf,sigma_points, settings_ut,weights);
+[x_hat, P] = UKFCorrect (x_hat,P,sigma_points,measure,station,weights,settings_ut);
 
-    %%% correction step
-    % measurements
-    gamma = zeros(3,2*n+1);
-    for i = 1:size(gamma,2)
-        gamma(:,i) = scLocalCoordinates(station,sigma_points(:,i));
-    end
-    y_hat = zeros(3,1);
-    for i = 1:size(gamma,2)
-        y_hat = y_hat + weights.mean(i)*gamma(:,i);
-    end
-    % covariance matrices
-    Pyy = station.R;
-    for i = 1:size(gamma,2)
-        Pyy = Pyy + weights.cov(i) * (gamma(:,i) - y_hat) * (gamma(:,i) - y_hat)';
-    end
-
-    Pxy = zeros(6,3);
-    for i = 1:size(gamma,2)
-        Pxy = Pxy +  weights.cov(i) * (sigma_points(:,i) -x_hat) * (gamma(:,i) -y_hat)';
-    end
-
-    if cond(Pyy) < 1e4 % perform correction if Pyy is invertible
-
-        % kalman gain
-        K = Pxy/Pyy;
-        % Correction of the state
-        e = [measure(2,2)'-y_hat(1);...
-            180/pi*angdiff( y_hat(2:3)*pi/180, measure(2,3:4)'*pi/180) ];
-        x_hat = x_hat + K*e;
-        % Propagation of covariance matrix
-        P = P-K*Pyy*K';
-    end
 end
 
-function [sigma_points, P, x_hat] = UT(t0,tf,sigma_points, settings_ut,weights)
+function [sigma_points,x_hat,P] = UKFPropagate(t0,tf,x_hat,P,settings_ut,weights)
 
-mu = settings_ut.mu;
-J2 = settings_ut.J2;
-Re = settings_ut.Re;
 n = settings_ut.n;
 ode_opt = settings_ut.ode_opt;
 
-%sigma points
-for i = 1:2*n+1
-    [~,x] = ode113(@PTBP,[t0,tf],sigma_points(:,i),ode_opt,mu,J2,Re);
-    sigma_points(:,i) = x(end,:)';
+lambda = settings_ut.lambda;
+
+% Compute sigma points at t_(k-1)
+mat = sqrtm((n+lambda)*P);
+sigma_points(:,1,1) = x_hat;
+for i = 1:n
+    sigma_points(:,i+1,1) = x_hat + mat(:,i);
+    sigma_points(:,i+1+n,1) = x_hat - mat(:,i);
 end
 
-% state
-x_hat = zeros(6,1);
-for i = 1:size(sigma_points,2)
-    x_hat = x_hat + weights.mean(i)*sigma_points(:,i);
+% Propagate sigma points to t_k
+if t0<tf
+    for i = 1:2*n+1
+        switch settings_ut.fun
+            case 'Absolute'
+                mu = settings_ut.mu;
+                J2 = settings_ut.J2;
+                Re = settings_ut.Re;
+                [~,x] = ode113(@PTBP,[t0,tf],sigma_points(:,i),ode_opt,mu,J2,Re);
+
+            case 'Relative'
+                mean_motion = settings_ut.mean_motion;
+                [~,x] = ode113(@CW,[t0,tf],sigma_points(:,i),ode_opt,mean_motion);
+                x = x(end,:);
+                % x = CW_analytic(tf-t0,sigma_points(:,i),mean_motion);
+                x = x';
+        end
+        sigma_points(:,i) = x(end,:)';
+      
+    end
+    
+    % Compute state vector
+    x_hat = zeros(6,1);
+    for i = 1:size(sigma_points,2)
+        x_hat = x_hat + weights.mean(i)*sigma_points(:,i);
+    end
+    % Compute Covariance matrix
+    P = zeros(6,6);
+    for i = 1:size(sigma_points,2)
+        P = P + weights.cov(i) * (sigma_points(:,i) -x_hat) * (sigma_points(:,i) -x_hat)';
+    end
 end
 
-% covariance matrix
-P = zeros(6,6);
-for i = 1:size(sigma_points,2)
-    P = P + weights.cov(i) * (sigma_points(:,i) -x_hat) * (sigma_points(:,i) -x_hat)';
+end
+
+function R = eci2Lvlh(n,s)
+
+r_eci = s(1:3);
+v_eci = s(4:6);
+
+i_v = r_eci/norm(r_eci);
+k_v = cross(r_eci,v_eci)/norm(cross(r_eci,v_eci));
+j_v = cross(k_v,i_v);
+
+S = [ 0  n  0;
+     -n  0  0;
+      0  0  0;];
+
+R = [   [i_v';j_v';k_v']         zeros(3);
+       S*[i_v';j_v';k_v']    [i_v';j_v';k_v'] ];
+end
+
+function [x_hat, P] = UKFCorrect (x_hat,P,sigma_points,measure,station,weights,settings_ut)
+
+n = settings_ut.n;
+
+% Simulate measurements
+gamma = zeros(3,2*n+1);
+for i = 1:size(gamma,2)
+    switch settings_ut.fun
+        case 'Absolute'
+            gamma(:,i) = scLocalCoordinates(station,sigma_points(:,i));
+        case 'Relative'
+            gamma(:,i) = scRelCoordinates(sigma_points(:,i));
+    end
+end
+
+y_hat = zeros(3,1);
+for i = 1:size(gamma,2)
+    y_hat = y_hat + weights.mean(i)*gamma(:,i);
+end
+
+% covariance matrices
+Pyy = station.R;
+meas_diff = zeros(3,size(gamma,2));
+for i = 1:size(gamma,2)
+    meas_diff(:,i) = [gamma(1,i)'-y_hat(1);...
+        180/pi*angdiff( y_hat(2:3)*pi/180, gamma(2:3,i)*pi/180) ];
+    Pyy = Pyy + weights.cov(i) * meas_diff(:,i) * meas_diff(:,i)';
+end
+
+Pxy = zeros(6,3);
+for i = 1:size(gamma,2)
+    Pxy = Pxy +  weights.cov(i) * (sigma_points(:,i) -x_hat) * meas_diff(:,i)';
+end
+
+% Perform correction if Pyy is invertible
+if cond(Pyy) < 1e10
+
+    % kalman gain
+    K = Pxy/Pyy;
+
+    % Correction of the state
+    e = [measure(2,2)'-y_hat(1);...
+        180/pi*angdiff( y_hat(2:3)*pi/180, measure(2,3:4)'*pi/180) ];
+    x_hat = x_hat + K*e;
+
+    % Propagation of covariance matrix
+    P = P-K*Pyy*K';
 end
 end
+

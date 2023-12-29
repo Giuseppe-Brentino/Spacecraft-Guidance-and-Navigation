@@ -238,9 +238,9 @@ figure()
 hold on
 grid on
 plot(Mango_mc.rotated_pos(1,:),Mango_mc.rotated_pos(2,:),'k.');
-drawEllipse(Mango_lin.rotated_mean(1:2,5),Mango_lin.rotated_cov(1:2,1:2),3);
-drawEllipse(Mango_ut.rotated_mean(1:2,5),Mango_ut.rotated_cov(1:2,1:2),3);
-drawEllipse(Mango_mc.rotated_mean(1:2,5),Mango_mc.rotated_cov(1:2,1:2),3);
+drawEllipse(Mango_lin.rotated_mean(1:2),Mango_lin.rotated_cov(1:2,1:2),3);
+drawEllipse(Mango_ut.rotated_mean(1:2),Mango_ut.rotated_cov(1:2,1:2),3);
+drawEllipse(Mango_mc.rotated_mean(1:2),Mango_mc.rotated_cov(1:2,1:2),3);
 plot(Mango_lin.rotated_mean(1),Mango_lin.rotated_mean(2),'o','MarkerSize',10,'MarkerFaceColor','none')
 plot(Mango_ut.rotated_mean(1),Mango_ut.rotated_mean(2),'*','MarkerSize',10,'MarkerFaceColor','none')
 plot(Mango_mc.rotated_mean(1),Mango_mc.rotated_mean(2),'s','MarkerSize',10,'MarkerFaceColor','none')
