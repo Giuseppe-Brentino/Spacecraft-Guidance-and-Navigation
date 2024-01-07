@@ -7,6 +7,7 @@ addpath('.\kernels\')
 cspice_furnsh('assignment02.tm')
 plotStyle;
 
+rng default
 %% Set initial conditions
 
 t_sep = cspice_str2et('2010-08-12T05:27:39.114');
@@ -113,14 +114,34 @@ for i = 1:N + 1
     % Check if Unscented Transform error is within limit
     if delta_r_ut(i) < delta_r_ut_lim(i) && ~flag.found_delta_r_ut
         flag.found_delta_r_ut = true;
-        N_lin_ut = i - 1;
+        N_ut_lim = i - 1;
     end
 end
 
+figure()
+hold on
+grid on
+plot(0:10,delta_r_lin)
+plot(0:10,delta_r_lin_lim)
+xline(N_lin_lim)
+legend('$\Delta$r','$\Delta$r lim', 'First unsafe orbit')
+xlabel('Number of orbits [-]')
+ylabel('$\Delta$r [km]')
+
+
+figure()
+hold on
+grid on
+plot(0:10,delta_r_ut)
+plot(0:10,delta_r_ut_lim)
+xline(N_ut_lim)
+legend('$\Delta$r','$\Delta$r lim', 'First unsafe orbit')
+xlabel('Number of orbits [-]')
+ylabel('$\Delta$r [km]')
 %% Ex 3
 
 % Set the number of simulations
-settings.n_sim = 100;
+settings.n_sim = 500;
 
 % Generate random initial conditions for Mango
 Mango_mc.x_0 = mvnrnd([r1_0; v1_0], P0, settings.n_sim)';
@@ -193,6 +214,8 @@ plot(orbit_index, Mango_ut.Pr_eig,'--')
 plot(orbit_index, Mango_mc.Pr_eig,'-.')
 title('Mango Pr')
 legend('LinCov','UT','MC')
+xlabel('Number of orbits [-]')
+ylabel('$\sigma_r$')
 subplot(2,2,2)
 hold on
 plot(orbit_index, Mango_lin.Pv_eig)
@@ -200,6 +223,8 @@ plot(orbit_index, Mango_ut.Pv_eig,'--')
 plot(orbit_index, Mango_mc.Pv_eig,'-.')
 title('Mango Pv')
 legend('LinCov','UT','MC')
+xlabel('Number of orbits [-]')
+ylabel('$\sigma_v$')
 subplot(2,2,3)
 hold on
 plot(orbit_index, Tango_lin.Pr_eig)
@@ -207,11 +232,15 @@ plot(orbit_index, Tango_ut.Pr_eig,'--')
 plot(orbit_index, Tango_mc.Pr_eig,'-.')
 title('Tango Pr')
 legend('LinCov','UT','MC')
+xlabel('Number of orbits [-]')
+ylabel('$\sigma_r$')
 subplot(2,2,4)
 hold on
 plot(orbit_index, Tango_lin.Pv_eig)
 plot(orbit_index, Tango_ut.Pv_eig,'--')
 plot(orbit_index, Tango_mc.Pv_eig,'-.')
+xlabel('Number of orbits [-]')
+ylabel('$\sigma_v$')
 title('Tango Pv')
 legend('LinCov','UT','MC')
 
@@ -244,7 +273,8 @@ drawEllipse(Mango_mc.rotated_mean(1:2),Mango_mc.rotated_cov(1:2,1:2),3);
 plot(Mango_lin.rotated_mean(1),Mango_lin.rotated_mean(2),'o','MarkerSize',10,'MarkerFaceColor','none')
 plot(Mango_ut.rotated_mean(1),Mango_ut.rotated_mean(2),'*','MarkerSize',10,'MarkerFaceColor','none')
 plot(Mango_mc.rotated_mean(1),Mango_mc.rotated_mean(2),'s','MarkerSize',10,'MarkerFaceColor','none')
-
+xlabel('x [km]')
+ylabel('y [km]')
 legend('Propagated points','LinCov ellipse','UT ellipse','MC ellipse',...
     'LinCov mean','UT mean','MC mean')
 
@@ -277,7 +307,8 @@ drawEllipse(Tango_mc.rotated_mean(1:2,end),Tango_mc.rotated_cov(1:2,1:2),3);
 plot(Tango_lin.rotated_mean(1),Tango_lin.rotated_mean(2),'o','MarkerSize',10,'MarkerFaceColor','none')
 plot(Tango_ut.rotated_mean(1),Tango_ut.rotated_mean(2),'*','MarkerSize',10,'MarkerFaceColor','none')
 plot(Tango_mc.rotated_mean(1),Tango_mc.rotated_mean(2),'s','MarkerSize',10,'MarkerFaceColor','none')
-
+xlabel('x [km]')
+ylabel('y [km]')
 legend('Propagated points','LinCov ellipse','UT ellipse','MC ellipse',...
     'LinCov mean','UT mean','MC mean')
 
@@ -414,7 +445,6 @@ n = length(x0);
 lambda = alpha^2 * n - n;
 mat = sqrtm((n + lambda) * P0);
 
-gamma = zeros(n, 2 * n + 1);
 weight_mean = zeros(2 * n + 1, 1);
 weight_cov = zeros(2 * n + 1, 1);
 y_mean = zeros(n, 1);
@@ -442,17 +472,15 @@ weight_cov(2:end) = weight_mean(2:end);
 % Propagate sigma points through the dynamics model
 for i = 1:2 * n + 1
     [~, x] = ode78(@TBP, [0, tf], chi(:, i), ode_opt, mu);
-    gamma(:, i) = x(end, :)';
-    y_mean = y_mean + weight_mean(i) * gamma(:, i);
+    sigma_points(:, i) = x(end, :)';
+    y_mean = y_mean + weight_mean(i) * sigma_points(:, i);
 end
 
 % Compute the covariance matrix P
 for i = 1:2 * n + 1
-    P = P + weight_cov(i) * (gamma(:, i) - y_mean) * (gamma(:, i) - y_mean)';
+    P = P + weight_cov(i) * (sigma_points(:, i) - y_mean) * (sigma_points(:, i) - y_mean)';
 end
 
-% Update sigma points
-sigma_points = gamma;
 
 end
 

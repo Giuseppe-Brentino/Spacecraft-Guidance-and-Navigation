@@ -136,6 +136,7 @@ time_plot = datetime(cspice_timout(Mango.gs_measurements(2:end,1)',...
 
 error_r = vecnorm(Mango.states_sgp4(1:3,:)-x_abs(1:3,2:end),2,1);
 figure()
+subplot(1,2,1)
 semilogy(time_plot,error_r)
 hold on
 semilogy(time_plot,sigma_r)
@@ -144,8 +145,8 @@ xlabel('Time')
 ylabel('Range [km]')
 legend('error','3$\sigma$')
 
+subplot(1,2,2)
 error_v = vecnorm(Mango.states_sgp4(4:6,:)-x_abs(4:6,2:end),2,1);
-figure()
 semilogy(time_plot,error_v)
 hold on
 semilogy(time_plot,sigma_v)
@@ -211,7 +212,9 @@ end
 time_plot = datetime(cspice_timout(Tango.sat_measurements(2:end,1)',...
     'YYYY-MM-DD HR:MN:SC.###'),'InputFormat','yyyy-MM-dd HH:mm:ss.SSS');
 error_r = vecnorm(Tango.states(1:3,:)-x_rel(1:3,2:end),2,1);
+
 figure()
+subplot(1,2,1)
 semilogy(time_plot,error_r)
 hold on
 semilogy(time_plot,sigma_r)
@@ -220,8 +223,8 @@ ylabel('Distance [m]')
 xlabel('Time')
 legend('error','3$\sigma$')
 
+subplot(1,2,2)
 error_v = vecnorm(Tango.states(4:6,:)-x_rel(4:6,2:end),2,1);
-figure()
 semilogy(time_plot,error_v)
 hold on
 semilogy(time_plot,sigma_v)
@@ -239,7 +242,7 @@ P_prop = zeros(6,6,len);
 P_prop(:,:,1) = P_abs(:,:,end);
 
 s_prop = zeros(6,len);
-s_prop(:,1) = x_abs(:,1);
+s_prop(:,1) = x_abs(:,end);
 
 P_rot = zeros(6,6,len-1);
 Tango.P_abs = zeros(6,6,len-1);
@@ -267,10 +270,11 @@ end
 time_plot = datetime(cspice_timout(time_span(2:end),...
     'YYYY-MM-DD HR:MN:SC.###'),'InputFormat','yyyy-MM-dd HH:mm:ss.SSS');
 figure()
+subplot(1,2,1)
 plot(time_plot,Tango.sigma_r)
 ylabel('Distance [km]')
 xlabel('Time')
-figure()
+subplot(1,2,2)
 semilogy(time_plot,Tango.sigma_v)
 ylabel('Speed [km/s]')
 xlabel('Time')

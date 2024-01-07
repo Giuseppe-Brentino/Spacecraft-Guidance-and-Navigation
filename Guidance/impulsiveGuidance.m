@@ -174,7 +174,7 @@ max_earth_states = max(earth_states,[],2);
 
 % max and minimum Apophis states
 IMP_vect = linspace(IMPO,IMPC,300);
-apophis_states = cspice_spkezr('20099942',LW_vect,frame,'NONE',center);
+apophis_states = cspice_spkezr('20099942',IMP_vect,frame,'NONE',center);
 min_apo_states = min(apophis_states,[],2);
 max_apo_states = max(apophis_states,[],2);
 
@@ -206,8 +206,8 @@ x0 = zeros(21,1);
 
 % compute initial guesses
 x0(19) =   (LWO+LWC)/2 - (LWC-LWO)*0.4;
-x0(20) =   (DSMO+DSMC)/2 - (LWC-LWO)*0.4;
-x0(21) =  (IMPO+IMPC)/2 - (LWC-LWO)*0.4;
+x0(20) =   (DSMO+DSMC)/2 - (DSMC-DSMO)*0.4;
+x0(21) =  (IMPO+IMPC)/2 - (IMPC-IMPO)*0.4;
 x0(1:6) = cspice_spkezr('Earth', x0(19), frame, 'NONE', center);
 
 [~,x2_guess] = ode78(@scPropagator,[x0(19) x0(20)],x0(1:6),ode_opt,mu);
@@ -246,22 +246,6 @@ time_vec_a = linspace(states(19),states(21),500);
 earth = cspice_spkpos('EARTH',time_vec,frame,'NONE',center);
 apo = cspice_spkpos('20099942',time_vec_a,frame,'NONE',center);
 apo = [apo A_aimp(:,1:3)'];
-
-% plot 3d orbits
-sc_i = x_sc_prop(:,1:3)';
-[~,x_sc_prop2] = ode78(@scPropagator,[states(20) states(21)],states(7:12),ode_opt,mu);
-sc = [sc_i x_sc_prop2(:,1:3)'];
-
-figure()
-hold on
-grid on
-plot3(apo(1,:),apo(2,:),apo(3,:),'Color',[0.2,0.2,0.2])
-plot3(earth(1,:),earth(2,:),earth(3,:),'Color','b')
-plot3(sc(1,:),sc(2,:),sc(3,:),'Color','r')
-plot3(sc(1,1),sc(2,1),sc(3,1),'o','MarkerSize',5,'MarkerFaceColor','g')
-plot3(sc_i(1,end),sc_i(2,end),sc_i(3,end),'o','MarkerSize',5,'MarkerFaceColor','c')
-plot3(sc(1,end),sc(2,end),sc(3,end),'o','MarkerSize',5,'MarkerFaceColor','m')
-axis equal
 
 % plot distance
 figure()

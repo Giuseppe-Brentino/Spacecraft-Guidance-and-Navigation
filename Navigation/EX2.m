@@ -77,11 +77,9 @@ dates = datetime(cspice_timout(t_span,'YYYY-MM-DD HR:MN:SC.###'),...
 
 figure()
 % Kourou
-subplot(2,2,1)
-title('Kourou')
+subplot(1,2,1)
 hold on
 grid on
-plot(dates,Kourou.Mango_coord(2,:),'DisplayName','Not visible');
 
 vis_time = Kourou.visibility_time;
 K_vis_time_plot = datetime(cspice_timout(vis_time,'YYYY-MM-DD HR:MN:SC.###'),...
@@ -98,27 +96,17 @@ for i = 2:length(vis_time)
     end
 end
 
+plot(K_vis_time_plot,Az_plot,'DisplayName','Kourou');
 
-plot(K_vis_time_plot,Az_plot,'DisplayName','Visible');
-ylabel('Azimuth [deg]')
-xlabel('Date')
-legend
-subplot(2,2,3)
+subplot(1,2,2)
 hold on
 grid on
-plot(dates,Kourou.Mango_coord(3,:),'DisplayName','Not visible');
-plot(K_vis_time_plot,El_plot,'DisplayName','Visible');
-ylabel('Elevation [deg]')
-xlabel('Date')
-legend;
+plot(K_vis_time_plot,El_plot,'DisplayName','Kourou');
 
 %Svalbard
-subplot(2,2,2)
-title('Svalbard')
+subplot(1,2,1)
 hold on
 grid on
-plot(dates,Svalbard.Mango_coord(2,:),'DisplayName','Not visible');
-
 vis_time = Svalbard.visibility_time;
 S_vis_time_plot = datetime(cspice_timout(vis_time,'YYYY-MM-DD HR:MN:SC.###'),...
     'InputFormat','yyyy-MM-dd HH:mm:ss.SSS');
@@ -134,15 +122,14 @@ for i = 2:length(vis_time)
     end
 end
 
-plot(S_vis_time_plot,Az_plot,'DisplayName','Visible');
+plot(S_vis_time_plot,Az_plot,'DisplayName','Svalbard');
 ylabel('Azimuth [deg]')
 xlabel('Date')
 legend
-subplot(2,2,4)
+subplot(1,2,2)
 hold on
 grid on
-plot(dates,Svalbard.Mango_coord(3,:),'DisplayName','Not visible');
-plot(S_vis_time_plot,El_plot,'DisplayName','Visible');
+plot(S_vis_time_plot,El_plot,'DisplayName','Svalbard');
 ylabel('Elevation [deg]')
 xlabel('Date')
 legend;
@@ -162,7 +149,9 @@ TLE{2} = '2 36599 098.2803 049.5758 0043871 021.7908 338.5082 14.40871350  8293'
 % a)
 fun =@(t,x)TBP(t,x,mu);
 [r_eci,v_eci,~] = TLE2Cartesian(TLE,t0);
-x0_guess = [r_eci;v_eci];
+x0_guess = xx_1(end, :)';
+x0_true = [r_eci;v_eci];
+
 options = optimoptions('lsqnonlin','Algorithm','levenberg-marquardt',...
     'Display', 'iter');
 
@@ -182,7 +171,11 @@ data{2,2} = Svalbard.Mango_measured_coord;
 lsqnonlin(@costFcn, x0_guess, [],[],options,data,mu,fun,t0,ode_opt);
 
 % c)
+
 fun =@(t,x)PTBP(t,x,mu,J2,Re);
+[~, xx_1] = ode78(fun, [tsep t0], [r0; v0;], ode_opt);
+x0_guess = xx_1(end, :)';
+
 [x0_J2,resnorm_J2,residual_J2,exitflag_J2,~,~,jacobian_J2] = ...
 lsqnonlin(@costFcn, x0_guess, [],[],options,data,mu,fun,t0,ode_opt,J2,Re);
 
@@ -202,12 +195,16 @@ P_ls_J2 = resnorm_J2/(length(residual_J2)-length(x0_J2))...
 TLE = cell(2,1);   
 TLE{1} = '1 36827U 10028F   10224.22753605  .00278492  00000-0  82287-1 0  9996';
 TLE{2} = '2 36827 098.2797 049.5751 0044602 022.4408 337.8871 14.40890217    55';
+r0 = [4621.69343340281, 5399.26386352847, -3.09039248714313];
+v0 = [0.813960847513811, -0.719449862738607, 7.42706066911294];
 
 [Kourou.Tango_coord_TLE,Kourou.Tango_measured_coord] = simulateMeasurements(TLE,Kourou);
 [Svalbard.Tango_coord_TLE,Svalbard.Tango_measured_coord] = simulateMeasurements(TLE,Svalbard);
 
 [r_eci,v_eci,~] = TLE2Cartesian(TLE,t0);
-x0_guess = [r_eci;v_eci];
+x0_true = [r_eci;v_eci];
+[~, xx_1] = ode78(fun, [tsep t0], [r0; v0;]', ode_opt);
+x0_guess = xx_1(end, :)';
 
 data = cell(1,2);
 data{1,1} = Kourou;
