@@ -189,6 +189,21 @@ P_ls_both = resnorm_both/(length(residual_both)-length(x0_both))...
 P_ls_J2 = resnorm_J2/(length(residual_J2)-length(x0_J2))...
     .*inv(jacobian_J2.'*jacobian_J2);
 
+error_r_Kourou = norm(x0_true(1:3) - x0_Kourou(1:3));
+error_v_Kourou = norm(x0_true(4:6) - x0_Kourou(4:6));
+sigma_r_Kourou = 3*sqrt(trace(P_ls_Kourou(1:3,1:3)));
+sigma_v_Kourou = 3*sqrt(trace(P_ls_Kourou(4:6,4:6))); 
+
+error_r_both = norm(x0_true(1:3) - x0_both(1:3));
+error_v_both = norm(x0_true(4:6) - x0_both(4:6));
+sigma_r_both = 3*sqrt(trace(P_ls_both(1:3,1:3)));
+sigma_v_both = 3*sqrt(trace(P_ls_both(4:6,4:6))); 
+
+error_r_J2 = norm(x0_true(1:3) - x0_J2(1:3));
+error_v_J2 = norm(x0_true(4:6) - x0_J2(4:6));
+sigma_r_J2 = 3*sqrt(trace(P_ls_J2(1:3,1:3)));
+sigma_v_J2 = 3*sqrt(trace(P_ls_J2(4:6,4:6))); 
+
 % Best combination : J2(better model) + both station (more measurements)
 
 % Initial TLE
@@ -218,6 +233,11 @@ lsqnonlin(@costFcn, x0_guess, [],[],options,data,mu,fun,t0,ode_opt,J2,Re);
 
 P_ls_Tango = resnorm_Tango/(length(residual_Tango)-length(x0_Tango))...
     .*inv(jacobian_Tango.'*jacobian_Tango);
+
+error_r_Tango = norm(x0_true(1:3) - x0_Tango(1:3));
+error_v_Tango = norm(x0_true(4:6) - x0_Tango(4:6));
+sigma_r_Tango = 3*sqrt(trace(P_ls_Tango(1:3,1:3)));
+sigma_v_Tango = 3*sqrt(trace(P_ls_Tango(4:6,4:6))); 
 
 %% functions
 
